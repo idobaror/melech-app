@@ -1,7 +1,14 @@
 // ===== ליבת האפליקציה: התחברות, API, ניווט, כלי עזר =====
 
 const CFG = window.APP_CONFIG;
-const ROLES = { ALL: ['מנהל', 'משרד', 'טכנאי', 'אמן'], OFFICE: ['מנהל', 'משרד'], ADMIN: ['מנהל'], SETUP: ['מנהל', 'טכנאי'] };
+const ROLES = {
+  ALL: ['מנהל', 'משרד', 'מפיק', 'איש צוות'],
+  OPS: ['מנהל', 'משרד', 'מפיק'],     // כל האירועים
+  OFFICE: ['מנהל', 'משרד'],          // מכירות, הצעות, גבייה
+  SETUP: ['מנהל', 'מפיק'],           // פרוטוקול הקמה
+  ADMIN: ['מנהל']
+};
+const APP_URL = location.origin + location.pathname;
 const S = { session: null, user: null, cache: {} };
 
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -180,10 +187,10 @@ async function logout() {
 const PAGES = {};
 const NAV = [
   { path: 'home', title: 'בית', ico: '🏠', roles: ROLES.ALL },
-  { path: 'events', title: 'אירועים', ico: '📅', roles: ROLES.OFFICE },
-  { path: 'quote', title: 'הצעת מחיר', ico: '📄', roles: ROLES.OFFICE },
+  { path: 'events', title: 'אירועים', ico: '🎤', roles: ROLES.OPS },
+  { path: 'calendar', title: 'יומן', ico: '📅', roles: ROLES.ALL },
+  { path: 'quote', title: 'הצעות', ico: '📄', roles: ROLES.OFFICE },
   { path: 'protocol', title: 'הקמה', ico: '🔧', roles: ROLES.SETUP },
-  { path: 'summary', title: 'סיכום', ico: '📊', roles: ROLES.ADMIN },
   { path: 'settings', title: 'הגדרות', ico: '⚙️', roles: ROLES.ALL }
 ];
 
@@ -240,6 +247,11 @@ function startApp() {
 }
 
 window.addEventListener('hashchange', route);
+
+// PWA — עובד רק ב-https או localhost
+if ('serviceWorker' in navigator && !CFG.DEV_USERS) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
 document.addEventListener('DOMContentLoaded', async () => {
   $('#back-btn').addEventListener('click', () => history.length > 1 ? history.back() : (location.hash = '#/home'));
   if (!CFG.CLIENT_ID || CFG.CLIENT_ID.startsWith('REPLACE_ME') || !CFG.API_URL || CFG.API_URL.startsWith('REPLACE_ME')) {
