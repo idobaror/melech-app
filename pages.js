@@ -1,4 +1,4 @@
-// ===== הדפים =====
+// ===== הדפים — כל קטע מוצג לפי ההרשאות של המשתמש (can) =====
 
 function eventItem(e, sub, extraBadge, href) {
   return `<a class="item" href="${href || eventHref(e)}">
@@ -43,15 +43,17 @@ function crewMessage(e, c) {
   ].filter(x => x !== null).join('\n');
 }
 
-function feedbackHtml(list, isAdmin) {
-  if (!list.length) return '<p class="empty">אין משוב עדיין</p>';
-  return list.map(f => `
-    <div class="fb ${f.status === 'פתוח' ? 'open' : ''}">
-      <div class="fb-head"><b>${esc(f.name)}</b> <span class="muted small">${esc(f.role)} · ${esc(f.created)}</span>
-        ${f.status === 'פתוח' ? (isAdmin ? `<button class="btn sm secondary" data-resolve="${esc(f.id)}">✓ טופל</button>` : '<span class="badge warn">ממתין</span>') : '<span class="badge ok">טופל</span>'}
+// ---------- הערות לאירוע ----------
+function notesHtml(list, showEvent) {
+  if (!list.length) return '<p class="empty">אין הערות עדיין</p>';
+  const manage = can('notes_manage');
+  return list.map(n => `
+    <div class="fb ${n.status === 'פתוח' ? 'open' : ''}">
+      <div class="fb-head"><b>${esc(n.name)}</b> <span class="muted small">${esc(n.created)}</span>
+        ${n.status === 'פתוח' ? (manage ? `<button class="btn sm secondary" data-resolve="${esc(n.id)}">✓ טופל</button>` : '<span class="badge warn">פתוח</span>') : '<span class="badge ok">טופל</span>'}
       </div>
-      ${f.eventName && isAdmin ? `<div class="small muted">${esc(f.eventName)} · ${esc(fmtDate(f.eventDate))}</div>` : ''}
-      <div class="fb-text">${esc(f.text)}</div>
+      ${showEvent && n.eventName ? `<div class="small muted">${esc(n.eventName)} · ${esc(fmtDate(n.eventDate))}</div>` : ''}
+      <div class="fb-text">${esc(n.text)}</div>
     </div>`).join('');
 }
 
@@ -60,77 +62,98 @@ function bindResolve(el, onDone) {
     ev.preventDefault(); ev.stopPropagation();
     b.disabled = true;
     busy(true, 'מעדכן…');
-    try { await api('feedback_resolve', { id: b.dataset.resolve }); toast('סומן כטופל ✅', 'ok'); await onDone(); }
+    try { await api('notes_resolve', { id: b.dataset.resolve }); toast('סומן כטופל ✅', 'ok'); await onDone(); }
     catch (err) { toast(err.message, 'bad'); b.disabled = false; }
     finally { busy(false); }
   }));
+}
+
+function notesSection(list) {
+  if (!can('notes_write') && !list.length) return '';
+  return `<section class="card">
+    <h2>💬 הערות לאירוע</h2>
+    <p class="small muted" style="margin-top:0">${can('notes_manage') ? 'כל ההערות מהצוות' : 'ההערות שלך — מגיעות למנהל'}</p>
+    <div id="fb-list">${notesHtml(list)}</div>
+    ${can('notes_write') ? `<textarea id="fb-text" rows="2" placeholder="משהו חסר, תקלה, הערה לפעם הבאה…"></textarea>
+    <button class="btn secondary block" id="fb-add" style="margin-top:10px">שלח הערה</button>` : ''}
+  </section>`;
+}
+
+function bindNotes(el, e) {
+  const rebind = () => bindResolve(el, async () => {
+    const d = await api('event_get', { row: e.row, key: e.key });
+    $('#fb-list', el).innerHTML = notesHtml(d.notes); rebind();
+  });
+  rebind();
+  const add = $('#fb-add', el);
+  if (add) add.addEventListener('click', async () => {
+    const text = $('#fb-text', el).value.trim();
+    if (!text) return;
+    busy(true, 'שולח…');
+    try {
+      const list = await api('notes_add', { row: e.row, key: e.key, text });
+      $('#fb-list', el).innerHTML = notesHtml(list);
+      $('#fb-text', el).value = '';
+      rebind();
+      toast('ההערה נשלחה ✅', 'ok');
+    } catch (err) { toast(err.message, 'bad'); } finally { busy(false); }
+  });
 }
 
 // =====================================================
 // בית
 // =====================================================
 PAGES.home = {
-  roles: ROLES.ALL, title: 'בית',
+  perm: null, title: 'בית',
   async render(el, r, alive) {
     const d = await api('home');
     if (!alive()) return;
-    const isOffice = can(ROLES.OFFICE), isAdmin = can(ROLES.ADMIN);
+    const c = d.counts;
     let h = `<p class="muted" style="margin:0 0 12px">שלום ${esc(S.user.name)} 👋</p>`;
 
-    const mine = (d.myEvents || []).map(e => eventItem(e, esc([e.startTime, e.location].filter(Boolean).join(' · ')), e.myRole ? `<span class="badge brand">${esc(e.myRole)}</span>` : ''));
+    const kpis = [];
+    if ('upcoming' in c) kpis.push(`<a class="kpi" href="#/events?f=upcoming"><b>${c.upcoming}</b><span>אירועים קרובים</span></a>`,
+      `<a class="kpi ${c.noCrew ? 'alert' : ''}" href="#/events?f=nocrew"><b>${c.noCrew}</b><span>בלי צוות</span></a>`);
+    if ('waitingForQuote' in c) kpis.push(`<a class="kpi ${c.waitingForQuote ? 'alert' : ''}" href="${can('events_all') ? '#/events?f=waiting' : '#/quote'}"><b>${c.waitingForQuote}</b><span>ממתינים להצעה</span></a>`);
+    if ('unpaid' in c) kpis.push(`<a class="kpi ${c.unpaid ? 'alert' : ''}" href="${can('events_all') ? '#/events?f=unpaid' : '#/home'}"><b>${c.unpaid}</b><span>לגבייה</span></a>`);
+    if ('openNotes' in c) kpis.push(`<button class="kpi ${c.openNotes ? 'alert' : ''}" type="button" onclick="var t=document.getElementById('notes-card');t&&t.scrollIntoView({behavior:'smooth'})"><b>${c.openNotes}</b><span>הערות פתוחות</span></button>`);
+    if (kpis.length) h += `<div class="kpis">${kpis.join('')}</div>`;
 
-    if (!d.counts) { // איש צוות
-      el.innerHTML = h + listCard('🎤 האירועים שלי', mine, 'אין לך אירועים קרובים') +
-        `<a class="btn ghost block" href="#/calendar">📅 ליומן שלי</a>`;
-      return;
+    if (can('event_create')) h += `<a class="btn block" href="#/new" style="margin-bottom:14px">+ פנייה חדשה</a>`;
+
+    if (d.openNotes && d.openNotes.length) {
+      h += `<section class="card" id="notes-card"><h2>💬 הערות מהשטח</h2>${notesHtml(d.openNotes, true)}</section>`;
     }
 
-    const c = d.counts;
-    h += `<div class="kpis">
-      <a class="kpi" href="#/events?f=upcoming"><b>${c.upcoming}</b><span>אירועים קרובים</span></a>
-      <a class="kpi ${c.noCrew ? 'alert' : ''}" href="#/events?f=nocrew"><b>${c.noCrew}</b><span>בלי צוות</span></a>
-      ${isOffice ? `<a class="kpi ${c.waitingForQuote ? 'alert' : ''}" href="#/events?f=waiting"><b>${c.waitingForQuote}</b><span>ממתינים להצעה</span></a>
-      <a class="kpi ${c.unpaid ? 'alert' : ''}" href="#/events?f=unpaid"><b>${c.unpaid}</b><span>לגבייה</span></a>` : ''}
-      ${isAdmin ? `<button class="kpi ${c.openFeedback ? 'alert' : ''}" type="button" onclick="var t=document.getElementById('feedback-card');t&&t.scrollIntoView({behavior:'smooth'})"><b>${c.openFeedback}</b><span>משובים פתוחים</span></button>` : ''}
-    </div>`;
+    const mine = d.myEvents.map(e => eventItem(e, esc([e.startTime, e.location].filter(Boolean).join(' · ')), e.myRole ? `<span class="badge brand">${esc(e.myRole)}</span>` : ''));
+    if (mine.length || !kpis.length) h += listCard('🎤 האירועים שלי', mine, 'אין לך אירועים קרובים');
 
-    if (isOffice) h += `<a class="btn block" href="#/new" style="margin-bottom:14px">+ פנייה חדשה</a>`;
-
-    if (isAdmin && d.openFeedback.length) {
-      h += `<section class="card" id="feedback-card"><h2>💬 משובים מהשטח</h2>${feedbackHtml(d.openFeedback, true)}</section>`;
+    if (d.waitingForQuote) {
+      h += listCard('⏳ ממתינים להצעת מחיר', d.waitingForQuote.map(e => can('quotes')
+        ? eventItem(e, null, '<span class="badge brand">📄 להצעה</span>', `#/quote?row=${e.row}&k=${encodeURIComponent(e.key)}`)
+        : eventItem(e)), 'אין פניות שממתינות להצעה 🎉');
     }
-
-    if (mine.length) h += listCard('🎤 האירועים שלי', mine, '');
-
-    if (isOffice) {
-      h += listCard('⏳ ממתינים להצעת מחיר', d.waitingForQuote.map(e =>
-        eventItem(e, null, '<span class="badge brand">📄 להצעה</span>', `#/quote?row=${e.row}&k=${encodeURIComponent(e.key)}`)),
-        'אין פניות שממתינות להצעה 🎉');
+    if (d.upcoming) {
+      h += listCard('📅 אירועים קרובים', d.upcoming.map(e =>
+        eventItem(e, null, e.hasCrew ? '' : '<span class="badge warn">ללא צוות</span>')),
+        'אין אירועים קרובים', '<a class="small" href="#/events?f=upcoming">הכול</a>');
     }
-
-    h += listCard('📅 אירועים קרובים', d.upcoming.map(e =>
-      eventItem(e, null, e.hasCrew ? '' : '<span class="badge warn">ללא צוות</span>')),
-      'אין אירועים קרובים', '<a class="small" href="#/events?f=upcoming">הכול</a>');
-
-    if (isOffice) {
-      if (d.unpaid.length) {
-        h += listCard('💰 לגבייה — קרו ולא שולמו', d.unpaid.map(e =>
-          eventItem(e, esc(e.officeStatus || 'לא עודכן'), '<span class="badge bad">לגבות</span>')), '');
-      }
-      if (d.newRequests.length) {
-        h += listCard('🆕 פניות מהשבוע האחרון', d.newRequests.map(e => eventItem(e, null, statusBadge(e.status))), '');
-      }
-      if (d.followUps.length) {
-        h += `<section class="card"><h2>📝 פולואפ</h2>${d.followUps.map(e => `
-          <a class="item" href="${eventHref(e)}" style="align-items:flex-start">
-            ${dateBox(e.date)}
-            <div class="grow"><div class="title">${esc(e.name)} ${statusBadge(e.status)}</div>
-            <div class="note-box" style="margin-top:6px;max-height:90px">${esc(e.followUp)}</div></div>
-          </a>`).join('')}</section>`;
-      }
+    if (d.unpaid && d.unpaid.length) {
+      h += listCard('💰 לגבייה — קרו ולא שולמו', d.unpaid.map(e => eventItem(e, esc(e.officeStatus || 'לא עודכן'), '<span class="badge bad">לגבות</span>')), '');
     }
-
-    if (isAdmin) h += `<a class="btn ghost block" href="#/summary">📊 סיכום שבועי</a>`;
+    if (d.newRequests && d.newRequests.length) {
+      h += listCard('🆕 פניות מהשבוע האחרון', d.newRequests.map(e => eventItem(e, null, statusBadge(e.status))), '');
+    }
+    if (d.followUps && d.followUps.length) {
+      h += `<section class="card"><h2>📝 פולואפ מכירות</h2>${d.followUps.map(e => `
+        <a class="item" href="${eventHref(e)}" style="align-items:flex-start">
+          ${dateBox(e.date)}
+          <div class="grow"><div class="title">${esc(e.name)} ${statusBadge(e.status)}</div>
+          <div class="note-box" style="margin-top:6px;max-height:90px">${esc(e.followUp)}</div></div>
+        </a>`).join('')}</section>`;
+    }
+    if (!kpis.length) h += `<a class="btn ghost block" href="#/calendar">📅 ליומן שלי</a>`;
+    if (can('summary')) h += `<a class="btn ghost block" href="#/summary" style="margin-top:10px">📊 סיכום שבועי</a>`;
 
     el.innerHTML = h;
     bindResolve(el, route);
@@ -141,21 +164,22 @@ PAGES.home = {
 // רשימת אירועים
 // =====================================================
 PAGES.events = {
-  roles: ROLES.OPS, title: 'אירועים',
+  perm: 'events_all', title: 'אירועים',
   async render(el, r, alive) {
     const events = await api('events_list');
     if (!alive()) return;
     S.cache.events = { v: events, t: Date.now() };
 
     const filters = [['upcoming', 'קרובים'], ['nocrew', 'בלי צוות']];
-    if (can(ROLES.OFFICE)) filters.push(['waiting', 'ממתינים להצעה'], ['unpaid', 'לגבייה']);
+    if (can('sales')) filters.push(['waiting', 'ממתינים להצעה']);
+    if (can('billing')) filters.push(['unpaid', 'לגבייה']);
     filters.push(['past', 'עבר'], ['all', 'הכול']);
     let f = r.q.get('f') || 'upcoming';
     if (!filters.some(x => x[0] === f)) f = 'upcoming';
     let q = '';
 
     el.innerHTML = `
-      ${can(ROLES.OFFICE) ? '<a class="btn block" href="#/new" style="margin-bottom:12px">+ פנייה חדשה</a>' : ''}
+      ${can('event_create') ? '<a class="btn block" href="#/new" style="margin-bottom:12px">+ פנייה חדשה</a>' : ''}
       <input id="ev-search" type="search" placeholder="🔍 חיפוש לפי שם, מיקום או סוג" style="margin-bottom:10px">
       <div class="chips">${filters.map(([k, t]) => `<button class="chip" data-f="${k}">${t}</button>`).join('')}</div>
       <section class="card"><div id="ev-list" class="list"></div></section>`;
@@ -191,7 +215,7 @@ PAGES.events = {
 // פנייה חדשה
 // =====================================================
 PAGES.new = {
-  roles: ROLES.OFFICE, title: 'פנייה חדשה', navAs: 'events',
+  perm: 'event_create', title: 'פנייה חדשה', navAs: 'events',
   async render(el, r, alive) {
     const opts = await eventOptions();
     if (!alive()) return;
@@ -207,8 +231,8 @@ PAGES.new = {
             <div><label>הגברה</label><select name="amplification">${optionsHtml(opts.amplificationOptions, '')}</select></div>
             <div><label>מיקום</label><input name="location"></div>
           </div>
-          <label>הערות</label><input name="notes">
-          <label>הערת פולואפ ראשונה</label><textarea name="followUp" rows="2" placeholder="מאיפה הגיע, מה ביקש…"></textarea>
+          <label>הערה כללית</label><input name="notes">
+          ${can('sales') ? '<label>הערת פולואפ ראשונה</label><textarea name="followUp" rows="2" placeholder="מאיפה הגיע, מה ביקש…"></textarea>' : ''}
           <button class="btn block" style="margin-top:16px" type="submit">שמור פנייה</button>
         </form>
       </section>`;
@@ -230,56 +254,25 @@ PAGES.new = {
 // פרטי אירוע
 // =====================================================
 PAGES.event = {
-  roles: ROLES.ALL, title: 'פרטי אירוע', navAs: 'events',
+  perm: null, title: 'פרטי אירוע', navAs: 'events',
   async render(el, r, alive) {
     const row = r.arg, key = r.q.get('k') || '';
-    if (!can(ROLES.OPS)) {
-      const d = await api('event_get', { row, key });
-      if (!alive()) return;
-      return renderCrewEvent(el, d);
-    }
-    const [d, opts] = await Promise.all([api('event_get', { row, key }), eventOptions()]);
+    const d = await api('event_get', { row, key });
     if (!alive()) return;
-    renderOpsEvent(el, d, opts);
+    // צפייה בלבד: אין עריכה, אין שיבוץ ואין "כל האירועים"
+    if (!d.canEdit.length && !d.users && !d.sameDay) return renderReadOnlyEvent(el, d);
+    const opts = await eventOptions();
+    if (!alive()) return;
+    renderEditableEvent(el, d, opts);
   }
 };
 
-function feedbackSection(e, list) {
-  return `<section class="card">
-    <h2>💬 משוב על האירוע</h2>
-    <p class="small muted" style="margin-top:0">${can(ROLES.ADMIN) ? 'כל המשובים מהשטח' : 'המשוב מגיע למנהל'}</p>
-    <div id="fb-list">${feedbackHtml(list, can(ROLES.ADMIN))}</div>
-    <textarea id="fb-text" rows="2" placeholder="איך היה? משהו חסר, תקלה, הערה לפעם הבאה…"></textarea>
-    <button class="btn secondary block" id="fb-add" style="margin-top:10px">שלח משוב</button>
-  </section>`;
-}
-
-function bindFeedback(el, e) {
-  const rebind = () => bindResolve(el, async () => {
-    const d = await api('event_get', { row: e.row, key: e.key });
-    $('#fb-list', el).innerHTML = feedbackHtml(d.feedback, can(ROLES.ADMIN)); rebind();
-  });
-  rebind();
-  $('#fb-add', el).addEventListener('click', async () => {
-    const text = $('#fb-text', el).value.trim();
-    if (!text) return;
-    busy(true, 'שולח משוב…');
-    try {
-      const list = await api('feedback_add', { row: e.row, key: e.key, text });
-      $('#fb-list', el).innerHTML = feedbackHtml(list, can(ROLES.ADMIN));
-      $('#fb-text', el).value = '';
-      rebind();
-      toast('המשוב נשלח ✅', 'ok');
-    } catch (err) { toast(err.message, 'bad'); } finally { busy(false); }
-  });
-}
-
-function renderCrewEvent(el, d) {
+function renderReadOnlyEvent(el, d) {
   const e = d.event;
-  setTitle(e.name);
+  setTitle(e.displayName || e.name);
   el.innerHTML = `
     <section class="card">
-      <div class="card-head"><h2>${esc(e.name)}</h2><span class="badge brand">${esc(d.myRole || '')}</span></div>
+      <div class="card-head"><h2>${esc(e.displayName || e.name)}</h2>${d.myRole ? `<span class="badge brand">${esc(d.myRole)}</span>` : ''}</div>
       <dl class="kv">
         <dt>תאריך</dt><dd>${esc(fmtDate(e.date) || e.dateText)}</dd>
         <dt>שעת עלייה</dt><dd>${esc(e.startTime || '—')}</dd>
@@ -289,29 +282,29 @@ function renderCrewEvent(el, d) {
         ${e.phone ? `<dt>איש קשר</dt><dd><a href="tel:${esc(e.phone)}">${esc(e.phone)}</a></dd>` : ''}
         ${e.additionalShows ? `<dt>מופעים נוספים</dt><dd>${esc(e.additionalShows)}</dd>` : ''}
       </dl>
-      ${e.notes ? `<label>הערות לאירוע</label><div class="note-box">${esc(e.notes)}</div>` : ''}
+      ${e.notes ? `<label>הערה כללית</label><div class="note-box">${esc(e.notes)}</div>` : ''}
       ${d.myNote ? `<label>הערה אליך</label><div class="note-box">${esc(d.myNote)}</div>` : ''}
       <div class="btn-row">
         ${e.location ? `<a class="btn secondary" href="${wazeLink(e.location)}" target="_blank">🚗 ניווט</a>` : ''}
         ${e.phone ? `<a class="btn wa" href="${waLink(e.phone)}" target="_blank">וואטסאפ</a>` : ''}
+        ${can('protocol') ? `<a class="btn ghost" href="#/protocol?row=${e.row}&k=${encodeURIComponent(e.key)}">🔧 הקמה</a>` : ''}
       </div>
     </section>
     <section class="card"><h2>👥 הצוות באירוע</h2>
-      ${d.crew.map(c => `<div class="crew-row"><div class="grow">${esc(c.name)}</div><span class="badge">${esc(c.role)}</span></div>`).join('')}
+      ${d.crew.map(c => `<div class="crew-row"><div class="grow">${esc(c.name)}</div><span class="badge">${esc(c.role)}</span></div>`).join('') || '<p class="empty">עוד לא שובץ צוות</p>'}
     </section>
-    ${feedbackSection(e, d.feedback)}`;
-  bindFeedback(el, e);
+    ${notesSection(d.notes)}`;
+  bindNotes(el, e);
 }
 
-function renderOpsEvent(el, d, opts) {
+function renderEditableEvent(el, d, opts) {
   const e = d.event;
-  const isOffice = can(ROLES.OFFICE);
   const editable = f => d.canEdit.indexOf(f) >= 0;
   setTitle(e.displayName || e.name);
-  let crew = d.crew.map(c => ({ email: c.email, name: c.name, role: c.role, note: c.note }));
-  const phoneOf = email => (d.users.find(u => u.email === email) || {}).phone || '';
+  let crew = d.crew.map(c => ({ userId: c.userId, name: c.name, role: c.role, note: c.note }));
+  const phoneOf = id => ((d.users || []).find(u => u.id === id) || {}).phone || '';
 
-  const field = (name, label, html) => `<div><label>${label}</label>${html}</div>`;
+  const field = (label, html) => `<div><label>${label}</label>${html}</div>`;
   const input = (name, val, type = 'text') => `<input name="${name}" type="${type}" value="${esc(val || '')}" ${editable(name) ? '' : 'disabled'}>`;
   const select = (name, list, val, ph) => `<select name="${name}" ${editable(name) ? '' : 'disabled'}>${optionsHtml(list, val, ph)}</select>`;
 
@@ -319,26 +312,28 @@ function renderOpsEvent(el, d, opts) {
     <section class="card">
       <div class="card-head"><h2>${esc(e.displayName || e.name)}</h2>${statusBadge(e.status)}</div>
       <p class="muted small" style="margin:0">${esc(fmtDate(e.date) || 'אין תאריך')} ${e.startTime ? '· ' + esc(e.startTime) : ''} ${e.location ? '· 📍 ' + esc(e.location) : ''}</p>
+      ${d.myRole ? `<p class="small" style="margin:6px 0 0">התפקיד שלך: <span class="badge brand">${esc(d.myRole)}</span></p>` : ''}
       <div class="btn-row">
         ${e.phone ? `<a class="btn wa sm" href="${waLink(e.phone)}" target="_blank">וואטסאפ</a><a class="btn ghost sm" href="tel:${esc(e.phone)}">📞 חייג</a>` : ''}
         ${e.location ? `<a class="btn ghost sm" href="${wazeLink(e.location)}" target="_blank">🚗 ניווט</a>` : ''}
-        ${isOffice ? `<a class="btn secondary sm" href="#/quote?row=${e.row}&k=${encodeURIComponent(e.key)}">📄 הצעת מחיר</a>` : ''}
-        ${can(ROLES.SETUP) ? `<a class="btn ghost sm" href="#/protocol?row=${e.row}&k=${encodeURIComponent(e.key)}">🔧 הקמה</a>` : ''}
+        ${can('quotes') ? `<a class="btn secondary sm" href="#/quote?row=${e.row}&k=${encodeURIComponent(e.key)}">📄 הצעת מחיר</a>` : ''}
+        ${can('protocol') ? `<a class="btn ghost sm" href="#/protocol?row=${e.row}&k=${encodeURIComponent(e.key)}">🔧 הקמה</a>` : ''}
       </div>
     </section>
 
     <section class="card">
       <h2>👥 צוות משובץ</h2>
       <div id="crew-list"></div>
+      ${d.users ? `
       <div class="grid2">
-        <div><label>הוסף איש צוות</label><select id="crew-user"><option value="">— בחר —</option>${d.users.map(u => `<option value="${esc(u.email)}">${esc(u.name)}</option>`).join('')}</select></div>
+        <div><label>הוסף איש צוות</label><select id="crew-user"><option value="">— בחר —</option>${d.users.map(u => `<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('')}</select></div>
         <div><label>תפקיד באירוע</label><input id="crew-role" list="role-sugg" placeholder="זמר, נגן, הגברה, צלם…"><datalist id="role-sugg">${opts.roleSuggestions.map(x => `<option value="${esc(x)}">`).join('')}</datalist></div>
       </div>
       <label>הערה לאיש הצוות</label><input id="crew-note" placeholder="אופציונלי — תוצג לו ותישלח בוואטסאפ">
       <div class="btn-row">
         <button class="btn secondary" id="crew-add">+ הוסף</button>
         <button class="btn" id="crew-save">שמור שיבוץ</button>
-      </div>
+      </div>` : ''}
     </section>
 
     <section class="card">
@@ -346,22 +341,22 @@ function renderOpsEvent(el, d, opts) {
       <form id="ev-form">
         <label>שם אירוע</label>${input('name', e.name)}
         <div class="grid2">
-          ${field('status', 'סטטוס', select('status', opts.statusOptions, e.status, '— ממתין להצעה —'))}
-          ${field('phone', 'טלפון', input('phone', e.phone, 'tel'))}
-          ${field('date', 'תאריך', input('date', e.date, 'date'))}
-          ${field('startTime', 'שעת עלייה', input('startTime', e.startTime))}
-          ${field('eventType', 'מוצר', select('eventType', opts.eventTypeOptions, e.eventType))}
-          ${field('amplification', 'הגברה', select('amplification', opts.amplificationOptions, e.amplification))}
+          ${field('סטטוס', select('status', opts.statusOptions, e.status, '— ממתין להצעה —'))}
+          ${field('טלפון', input('phone', e.phone, 'tel'))}
+          ${field('תאריך', input('date', e.date, 'date'))}
+          ${field('שעת עלייה', input('startTime', e.startTime))}
+          ${field('מוצר', select('eventType', opts.eventTypeOptions, e.eventType))}
+          ${field('הגברה', select('amplification', opts.amplificationOptions, e.amplification))}
         </div>
         <label>מיקום</label>${input('location', e.location)}
-        <label>הערות</label>${input('notes', e.notes)}
+        <label>הערה כללית</label>${input('notes', e.notes)}
         ${'officeStatus' in e ? `<label>סטטוס גבייה</label>${input('officeStatus', e.officeStatus)}<p class="small muted" style="margin:4px 0 0">כשהתשלום התקבל — לכתוב <b>הושלם</b></p>` : ''}
         ${e.price ? `<p class="muted small">מחיר אחרון בהצעה: <b>${esc(e.price)}</b></p>` : ''}
-        <button class="btn block" style="margin-top:16px" type="submit">שמור שינויים</button>
+        ${d.canEdit.length ? '<button class="btn block" style="margin-top:16px" type="submit">שמור שינויים</button>' : ''}
       </form>
     </section>
 
-    ${d.sameDay.length ? `<section class="card"><h2>🗓️ עוד באותו יום (${d.sameDay.length})</h2>
+    ${d.sameDay && d.sameDay.length ? `<section class="card"><h2>🗓️ עוד באותו יום (${d.sameDay.length})</h2>
       ${d.sameDay.map((o, i) => `<div class="item">
         <div class="grow"><a class="title" href="${eventHref(o)}">${esc(o.name)}</a>
         <div class="sub">${esc([o.startTime, o.location].filter(Boolean).join(' · '))}</div>
@@ -379,41 +374,42 @@ function renderOpsEvent(el, d, opts) {
       <h2>📝 פולואפ מכירות</h2>
       <div id="fu-box">${e.followUp ? `<div class="note-box">${esc(e.followUp)}</div>` : '<p class="empty">אין הערות עדיין</p>'}</div>
       <label>הערה חדשה</label><textarea id="fu-text" rows="2"></textarea>
-      <button class="btn secondary block" id="fu-add" style="margin-top:10px">הוסף הערה</button>
+      <button class="btn secondary block" id="fu-add" style="margin-top:10px">הוסף לפולואפ</button>
     </section>` : ''}
 
-    ${feedbackSection(e, d.feedback)}`;
+    ${notesSection(d.notes)}`;
 
   // ----- צוות -----
   const drawCrew = (justSaved) => {
     $('#crew-list', el).innerHTML = crew.length ? crew.map((c, i) => {
-      const phone = phoneOf(c.email);
-      return `<div class="crew-row"><div class="grow"><b>${esc(c.name || c.email)}</b>
+      const phone = phoneOf(c.userId);
+      return `<div class="crew-row"><div class="grow"><b>${esc(c.name)}</b>
         <div class="sub small muted">${esc(c.role)}${c.note ? ' · ' + esc(c.note) : ''}</div></div>
-        ${justSaved && phone ? `<a class="btn sm wa" target="_blank" href="${waLink(phone, crewMessage(e, c))}">📲 שלח</a>` : ''}
-        <button class="btn sm danger" data-rm="${i}">הסר</button></div>`;
+        ${d.users && justSaved && phone ? `<a class="btn sm wa" target="_blank" href="${waLink(phone, crewMessage(e, c))}">📲 שלח</a>` : ''}
+        ${d.users ? `<button class="btn sm danger" data-rm="${i}">הסר</button>` : ''}</div>`;
     }).join('') : '<p class="empty">עוד לא שובץ אף אחד</p>';
     $$('[data-rm]', el).forEach(b => b.addEventListener('click', () => { crew.splice(+b.dataset.rm, 1); drawCrew(false); }));
   };
   drawCrew(true);
-  $('#crew-add', el).addEventListener('click', () => {
-    const email = $('#crew-user', el).value;
-    if (!email) return toast('בחר איש צוות', 'bad');
-    if (crew.some(c => c.email === email)) return toast('כבר משובץ', 'bad');
-    const u = d.users.find(x => x.email === email);
-    crew.push({ email, name: u.name, role: $('#crew-role', el).value.trim(), note: $('#crew-note', el).value.trim() });
-    $('#crew-user', el).value = ''; $('#crew-role', el).value = ''; $('#crew-note', el).value = '';
-    drawCrew(false);
-  });
-  $('#crew-save', el).addEventListener('click', async () => {
-    busy(true, 'שומר שיבוץ…');
-    try {
-      const saved = await api('assign_set', { row: e.row, key: e.key, crew });
-      crew = saved.map(c => ({ email: c.email, name: c.name, role: c.role, note: c.note }));
-      drawCrew(true);
-      toast('השיבוץ נשמר — אפשר לשלוח לכל אחד בוואטסאפ 📲', 'ok');
-    } catch (err) { toast(err.message, 'bad'); } finally { busy(false); }
-  });
+  if (d.users) {
+    $('#crew-add', el).addEventListener('click', () => {
+      const id = $('#crew-user', el).value;
+      if (!id) return toast('בחר איש צוות', 'bad');
+      if (crew.some(c => c.userId === id)) return toast('כבר משובץ', 'bad');
+      const u = d.users.find(x => x.id === id);
+      crew.push({ userId: id, name: u.name, role: $('#crew-role', el).value.trim(), note: $('#crew-note', el).value.trim() });
+      $('#crew-user', el).value = ''; $('#crew-role', el).value = ''; $('#crew-note', el).value = '';
+      drawCrew(false);
+    });
+    $('#crew-save', el).addEventListener('click', async () => {
+      busy(true, 'שומר שיבוץ…');
+      try {
+        crew = await api('assign_set', { row: e.row, key: e.key, crew });
+        drawCrew(true);
+        toast('השיבוץ נשמר — אפשר לשלוח לכל אחד בוואטסאפ 📲', 'ok');
+      } catch (err) { toast(err.message, 'bad'); } finally { busy(false); }
+    });
+  }
 
   // ----- עריכת פרטים -----
   $('#ev-form', el).addEventListener('submit', async ev => {
@@ -431,7 +427,7 @@ function renderOpsEvent(el, d, opts) {
       toast('נשמר ✅', 'ok');
       S.cache.events = null;
       history.replaceState(null, '', eventHref(nd.event));
-      renderOpsEvent(el, nd, opts);
+      renderEditableEvent(el, nd, opts);
     } catch (err) { toast(err.message, 'bad'); } finally { busy(false); }
   });
 
@@ -445,22 +441,22 @@ function renderOpsEvent(el, d, opts) {
     } catch (err) { b.textContent = '❌ שגיאה'; }
   }));
 
-  // ----- פולואפ -----
+  // ----- פולואפ מכירות -----
   if ($('#fu-add', el)) $('#fu-add', el).addEventListener('click', async () => {
     const comment = $('#fu-text', el).value.trim();
     if (!comment) return;
-    busy(true, 'מוסיף הערה…');
+    busy(true, 'מוסיף…');
     try {
       const res = await api('event_comment', { row: e.row, key: e.key, comment });
       e.followUp = res.followUp;
       $('#fu-box', el).innerHTML = `<div class="note-box">${esc(res.followUp)}</div>`;
       $('#fu-text', el).value = '';
       const box = $('#fu-box .note-box', el); box.scrollTop = box.scrollHeight;
-      toast('ההערה נוספה ✅', 'ok');
+      toast('נוסף לפולואפ ✅', 'ok');
     } catch (err) { toast(err.message, 'bad'); } finally { busy(false); }
   });
 
-  bindFeedback(el, e);
+  bindNotes(el, e);
 }
 
 // =====================================================
@@ -469,7 +465,7 @@ function renderOpsEvent(el, d, opts) {
 const MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
 
 PAGES.calendar = {
-  roles: ROLES.ALL, title: 'יומן',
+  perm: null, title: 'יומן',
   async render(el, r, alive) {
     const month = /^\d{4}-\d{2}$/.test(r.q.get('m') || '') ? r.q.get('m') : todayIso().slice(0, 7);
     const d = await api('calendar', { month });
@@ -477,7 +473,7 @@ PAGES.calendar = {
     const [y, m] = d.month.split('-').map(Number);
     const first = new Date(y, m - 1, 1);
     const days = new Date(y, m, 0).getDate();
-    const shift = (n) => { const t = new Date(y, m - 1 + n, 1); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}`; };
+    const shift = n => { const t = new Date(y, m - 1 + n, 1); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}`; };
     const byDay = {};
     d.events.forEach(e => { (byDay[e.date] = byDay[e.date] || []).push(e); });
     const iso = day => `${d.month}-${String(day).padStart(2, '0')}`;
@@ -491,7 +487,7 @@ PAGES.calendar = {
       const waiting = list.some(e => !e.status);
       cells += `<button class="cal-cell ${iso(day) === today ? 'today' : ''} ${list.length ? 'has' : ''}" data-day="${iso(day)}">
         <span class="num">${day}</span>
-        ${list.length ? `<span class="cal-count ${list.length > 1 ? 'multi' : ''} ${waiting ? 'waiting' : ''}">${list.length}</span>` : ''}
+        ${list.length ? `<span class="cal-count ${waiting ? 'waiting' : ''}">${list.length}</span>` : ''}
       </button>`;
     }
 
@@ -503,7 +499,7 @@ PAGES.calendar = {
           <a class="icon-btn dark" href="#/calendar?m=${shift(1)}" aria-label="חודש הבא">←</a>
         </div>
         <div class="cal-grid">${DAYS.map(x => `<div class="cal-dow">${x}</div>`).join('')}${cells}</div>
-        <p class="small muted" style="margin:10px 0 0">${d.events.length} אירועים החודש${can(ROLES.OPS) ? '' : ' (שלך)'}</p>
+        <p class="small muted" style="margin:10px 0 0">${d.events.length} אירועים החודש${d.all ? '' : ' (שלך)'}</p>
       </section>
       <div id="cal-day"></div>`;
 
@@ -528,10 +524,10 @@ PAGES.calendar = {
 // הצעת מחיר
 // =====================================================
 PAGES.quote = {
-  roles: ROLES.OFFICE, title: 'הצעת מחיר',
+  perm: 'quotes', title: 'הצעת מחיר',
   async render(el, r, alive) {
     const [events, opts, qopts] = await Promise.all([
-      cached('events', () => api('events_list'), 60 * 1000),
+      can('events_all') ? cached('events', () => api('events_list'), 60 * 1000) : Promise.resolve([]),
       eventOptions(),
       cached('qopts', () => api('quote_options'))
     ]);
@@ -550,7 +546,7 @@ PAGES.quote = {
         <select id="q-event">
           <option value="">— בחר אירוע —</option>
           ${waiting.length ? `<optgroup label="⚠️ ממתינים להצעה (${waiting.length})">${waiting.map(e => `<option value="${e.row}|${esc(e.key)}">🔴 ${esc(optLabel(e))}</option>`).join('')}</optgroup>` : ''}
-          <optgroup label="אירועים פעילים (${others.length})">${others.map(e => `<option value="${e.row}|${esc(e.key)}">${esc(optLabel(e))}</option>`).join('')}</optgroup>
+          ${others.length ? `<optgroup label="אירועים פעילים (${others.length})">${others.map(e => `<option value="${e.row}|${esc(e.key)}">${esc(optLabel(e))}</option>`).join('')}</optgroup>` : ''}
         </select>
       </section>
       <div id="q-form"></div>`;
@@ -576,11 +572,12 @@ async function loadQuoteEvent(el, value, opts, alive) {
   const d = await api('event_get', { row, key });
   if (!alive()) return;
   const e = d.event;
-  const lastEmail = (d.quotes.find(q => q.emailTo) || {}).emailTo || '';
+  const sameDay = d.sameDay || [];
+  const lastEmail = ((d.quotes || []).find(q => q.emailTo) || {}).emailTo || '';
 
   box.innerHTML = `
-    ${d.sameDay.length ? `<section class="card" style="border-color:var(--warn)"><b>⚠️ יש עוד ${d.sameDay.length} אירועים באותו יום:</b>
-      <div class="small">${d.sameDay.map(o => esc(`${o.name} ${o.startTime ? '(' + o.startTime + ')' : ''} ${o.location ? '· ' + o.location : ''}`)).join('<br>')}</div></section>` : ''}
+    ${sameDay.length ? `<section class="card" style="border-color:var(--warn)"><b>⚠️ יש עוד ${sameDay.length} אירועים באותו יום:</b>
+      <div class="small">${sameDay.map(o => esc(`${o.name} ${o.startTime ? '(' + o.startTime + ')' : ''} ${o.location ? '· ' + o.location : ''}`)).join('<br>')}</div></section>` : ''}
     <section class="card">
       <form id="q">
         <label style="margin-top:0">שם אירוע</label><input name="name" value="${esc(e.name)}">
@@ -594,7 +591,7 @@ async function loadQuoteEvent(el, value, opts, alive) {
           <div><label>מחיר (₪)</label><input name="price" inputmode="numeric" placeholder="למשל: 5,000"></div>
           <div><label>משך מופע (דק׳)</label><input name="duration" value="50" inputmode="numeric"></div>
         </div>
-        <label>הערות</label><input name="notes" value="${esc(e.notes)}">
+        <label>הערה כללית</label><input name="notes" value="${esc(e.notes)}">
 
         <div id="q-host" hidden>
           <label>✨ מספר אורחים במילים</label><input name="guestCountInWords" placeholder="למשל: שלושה">
@@ -718,13 +715,16 @@ const PROTOCOL_CHECKS = [
 ];
 
 PAGES.protocol = {
-  roles: ROLES.SETUP, title: 'פרוטוקול הקמה',
+  perm: 'protocol', title: 'פרוטוקול הקמה',
   async render(el, r, alive) {
     const preRow = r.q.get('row'), preKey = r.q.get('k');
-    const [all, past] = await Promise.all([cached('events', () => api('events_list'), 60 * 1000), api('protocol_list')]);
+    const [all, past] = await Promise.all([
+      can('events_all') ? cached('events', () => api('events_list'), 60 * 1000) : api('my_events'),
+      api('protocol_list')
+    ]);
     if (!alive()) return;
 
-    const choices = all.filter(e => e.date && daysFromToday(e.date) >= -1 && daysFromToday(e.date) <= 7 && e.status && e.status !== 'נפל')
+    const choices = all.filter(e => e.date && daysFromToday(e.date) >= -1 && daysFromToday(e.date) <= 7 && e.status !== 'נפל')
       .sort((a, b) => (a.date + (a.startTime || '')).localeCompare(b.date + (b.startTime || '')));
     const todays = choices.find(c => c.date === todayIso());
     const preVal = preRow ? `${preRow}|${preKey}` : (todays ? `${todays.row}|${todays.key}` : '');
@@ -841,7 +841,7 @@ function resizeImage(file, maxSize, cb) {
 }
 
 PAGES.report = {
-  roles: ROLES.SETUP, title: 'דוח הקמה', navAs: 'protocol',
+  perm: 'protocol', title: 'דוח הקמה', navAs: 'protocol',
   async render(el, r, alive) {
     const d = await api('protocol_get', { id: r.arg });
     if (!alive()) return;
@@ -862,7 +862,7 @@ PAGES.report = {
 // סיכום שבועי
 // =====================================================
 PAGES.summary = {
-  roles: ROLES.ADMIN, title: 'סיכום שבועי', navAs: 'home',
+  perm: 'summary', title: 'סיכום שבועי', navAs: 'home',
   async render(el, r, alive) {
     const d = await api('summary_get');
     if (!alive()) return;
@@ -903,35 +903,69 @@ PAGES.summary = {
 // הגדרות
 // =====================================================
 PAGES.settings = {
-  roles: ROLES.ALL, title: 'הגדרות',
+  perm: null, title: 'הגדרות',
   async render(el, r, alive) {
+    const catalog = S.user.catalog || [];
+    const permLabel = id => (catalog.find(p => p.id === id) || {}).label || id;
     let h = `
       <section class="card">
-        <h2>👤 הפרופיל שלי</h2>
-        <dl class="kv"><dt>שם</dt><dd>${esc(S.user.name)}</dd><dt>אימייל</dt><dd>${esc(S.user.email)}</dd><dt>תפקיד</dt><dd>${esc(S.user.role)}</dd></dl>
+        <h2>👤 ${esc(S.user.name)}</h2>
+        <div class="perm-tags">${S.user.perms.map(p => `<span class="badge brand">${esc(permLabel(p))}</span>`).join('') || '<span class="muted small">צפייה באירועים שלך</span>'}</div>
         <p class="small muted">📱 להתקנה בטלפון: בתפריט הדפדפן ← "הוסף למסך הבית"</p>
-        <button class="btn ghost block" id="logout" style="margin-top:6px">התנתק</button>
+        <details><summary class="small" style="cursor:pointer">🔑 החלפת קוד</summary>
+          <form id="pin-form" class="grid2">
+            <div><label>קוד נוכחי</label><input name="current" inputmode="numeric" maxlength="4" pattern="\\d{4}" required></div>
+            <div><label>קוד חדש</label><input name="pin" inputmode="numeric" maxlength="4" pattern="\\d{4}" required></div>
+            <button class="btn secondary" type="submit" style="grid-column:1/-1;margin-top:10px">החלף קוד</button>
+          </form>
+        </details>
+        <button class="btn ghost block" id="logout" style="margin-top:14px">התנתק</button>
       </section>`;
-    if (!can(ROLES.ADMIN)) { el.innerHTML = h; $('#logout', el).addEventListener('click', logout); return; }
+
+    const bindSelf = () => {
+      $('#logout', el).addEventListener('click', logout);
+      $('#pin-form', el).addEventListener('submit', async ev => {
+        ev.preventDefault();
+        busy(true, 'מחליף קוד…');
+        try {
+          const res = await api('change_pin', { current: ev.target.current.value, pin: ev.target.pin.value });
+          S.session = res.session; store('mk_session', S.session);
+          ev.target.reset();
+          toast('הקוד הוחלף ✅', 'ok');
+        } catch (err) { toast(err.message, 'bad'); } finally { busy(false); }
+      });
+    };
+    if (!can('admin')) { el.innerHTML = h; bindSelf(); return; }
 
     let [users, products] = await Promise.all([api('users_list'), api('products_list')]);
     if (!alive()) return;
+    const presets = S.user.presets || {};
+    const groups = [...new Set(catalog.map(p => p.group))];
+
     el.innerHTML = h + `
-      <a class="btn ghost block" href="#/summary" style="margin-bottom:14px">📊 סיכום שבועי</a>
       <section class="card">
-        <div class="card-head"><h2>👥 משתמשים והרשאות</h2><button class="btn sm" id="u-new">+ משתמש</button></div>
+        <div class="card-head"><h2>👥 משתתפים והרשאות</h2><button class="btn sm" id="u-new">+ משתתף</button></div>
         <div id="u-list"></div>
       </section>
       <section class="card" id="u-form-card" hidden>
-        <h2 id="u-form-title">משתמש חדש</h2>
+        <h2 id="u-form-title">משתתף חדש</h2>
         <form id="u-form">
-          <label>אימייל (חשבון Google)</label><input name="email" type="email" required>
+          <input type="hidden" name="id">
           <div class="grid2">
-            <div><label>שם</label><input name="name" required></div>
-            <div><label>תפקיד</label><select name="role">${ROLES.ALL.map(x => `<option>${x}</option>`).join('')}</select></div>
+            <div><label>שם (כפי שיופיע במסך הכניסה)</label><input name="name" required></div>
+            <div><label>טלפון (לוואטסאפ)</label><input name="phone" type="tel"></div>
           </div>
-          <label>טלפון (לשליחת שיבוצים ופרוטוקולים בוואטסאפ)</label><input name="phone" type="tel">
+          <label id="pin-label">קוד כניסה — 4 ספרות</label>
+          <input name="pin" inputmode="numeric" maxlength="4" pattern="\\d{4}" autocomplete="off">
           <label class="check"><input type="checkbox" name="active" checked> פעיל</label>
+
+          <h3 style="margin-top:16px">הרשאות</h3>
+          <div class="chips" style="margin:6px 0 0">${Object.keys(presets).map(n => `<button type="button" class="chip" data-preset="${esc(n)}">${esc(n)}</button>`).join('')}</div>
+          <p class="small muted" style="margin:2px 0 0">תבנית ממלאת את הסימונים — אפשר לשנות אחר כך</p>
+          ${groups.map(g => `<div class="perm-group"><h3>${esc(g)}</h3>
+            ${catalog.filter(p => p.group === g).map(p => `<label class="perm-item"><input type="checkbox" name="perm" value="${esc(p.id)}"><span>${esc(p.label)}${p.hint ? `<small>${esc(p.hint)}</small>` : ''}</span></label>`).join('')}
+          </div>`).join('')}
+          <p class="small muted">כל משתתף רואה תמיד את האירועים שהוא משובץ אליהם.</p>
           <div class="btn-row"><button class="btn ghost" type="button" id="u-cancel">ביטול</button><button class="btn" type="submit">שמור</button></div>
         </form>
       </section>
@@ -947,50 +981,47 @@ PAGES.settings = {
           <input type="hidden" name="originalName">
           <div class="btn-row"><button class="btn ghost" type="button" id="p-cancel">ביטול</button><button class="btn" type="submit">שמור</button></div>
         </form>
-      </section>
-
-      <section class="card small">
-        <h2>🔐 מה כל תפקיד רואה</h2>
-        <div class="table-wrap"><table>
-          <tr><th></th><th>מנהל</th><th>משרד</th><th>מפיק</th><th>איש צוות</th></tr>
-          <tr><td>כל האירועים, עריכה ושיבוץ</td><td>✅</td><td>✅</td><td>✅</td><td>—</td></tr>
-          <tr><td>פניות, הצעות ושליחה ללקוח</td><td>✅</td><td>✅</td><td>—</td><td>—</td></tr>
-          <tr><td>מחיר, גבייה, פולואפ מכירות</td><td>✅</td><td>✅</td><td>—</td><td>—</td></tr>
-          <tr><td>פרוטוקול הקמה</td><td>✅</td><td>—</td><td>✅</td><td>—</td></tr>
-          <tr><td>האירועים שלי + יומן</td><td>✅</td><td>✅</td><td>✅</td><td>✅ שלו</td></tr>
-          <tr><td>משוב על אירוע</td><td>רואה הכול</td><td>כותב</td><td>כותב</td><td>כותב</td></tr>
-          <tr><td>סיכום, משתמשים, מוצרים</td><td>✅</td><td>—</td><td>—</td><td>—</td></tr>
-        </table></div>
       </section>`;
-    $('#logout', el).addEventListener('click', logout);
+    bindSelf();
 
-    // ----- משתמשים -----
+    // ----- משתתפים -----
     const form = $('#u-form', el);
+    const setPerms = list => $$('[name=perm]', form).forEach(c => { c.checked = list.indexOf(c.value) >= 0; });
     const drawUsers = () => {
       $('#u-list', el).innerHTML = users.map((u, i) => `
-        <div class="crew-row">
-          <div class="grow"><b>${esc(u.name || u.email)}</b> ${u.active ? '' : '<span class="badge bad">מושבת</span>'}
-          <div class="small muted">${esc(u.email)}${u.phone ? ' · ' + esc(u.phone) : ''}</div></div>
-          <span class="badge brand">${esc(u.role)}</span>
+        <div class="crew-row" style="align-items:flex-start">
+          <div class="grow"><b>${esc(u.name)}</b> ${u.active ? '' : '<span class="badge bad">מושבת</span>'}
+            <div class="small muted">${u.phone ? esc(u.phone) : 'אין טלפון'}</div>
+            <div class="perm-tags">${u.perms.includes('admin') ? '<span class="badge brand">👑 ניהול — הכול</span>' : (u.perms.map(p => `<span class="badge">${esc(permLabel(p))}</span>`).join('') || '<span class="small muted">רק אירועים שהוא משובץ אליהם</span>')}</div>
+          </div>
           <button class="btn sm ghost" data-edit="${i}">ערוך</button>
-        </div>`).join('') || '<p class="empty">אין משתמשים</p>';
+        </div>`).join('') || '<p class="empty">אין משתתפים</p>';
       $$('[data-edit]', el).forEach(b => b.addEventListener('click', () => openForm(users[+b.dataset.edit])));
     };
     const openForm = u => {
       $('#u-form-card', el).hidden = false;
-      $('#u-form-title', el).textContent = u ? 'עריכת משתמש' : 'משתמש חדש';
-      form.email.value = u ? u.email : ''; form.email.readOnly = !!u;
-      form.name.value = u ? u.name : ''; form.role.value = u ? u.role : 'איש צוות';
-      form.phone.value = u ? u.phone : ''; form.active.checked = u ? u.active : true;
+      $('#u-form-title', el).textContent = u ? `עריכת ${u.name}` : 'משתתף חדש';
+      form.id.value = u ? u.id : '';
+      form.name.value = u ? u.name : '';
+      form.phone.value = u ? u.phone : '';
+      form.pin.value = '';
+      form.pin.required = !u;
+      form.pin.placeholder = u ? 'השאר ריק כדי לא לשנות' : '4 ספרות';
+      form.active.checked = u ? u.active : true;
+      setPerms(u ? u.perms : presets['איש צוות'] || []);
       $('#u-form-card', el).scrollIntoView({ behavior: 'smooth' });
     };
+    $$('[data-preset]', el).forEach(b => b.addEventListener('click', () => setPerms(presets[b.dataset.preset])));
     $('#u-new', el).addEventListener('click', () => openForm(null));
     $('#u-cancel', el).addEventListener('click', () => { $('#u-form-card', el).hidden = true; });
     form.addEventListener('submit', async ev => {
       ev.preventDefault();
       busy(true, 'שומר…');
       try {
-        users = await api('user_save', { email: form.email.value, name: form.name.value, role: form.role.value, phone: form.phone.value, active: form.active.checked });
+        users = await api('user_save', {
+          id: form.id.value || undefined, name: form.name.value, phone: form.phone.value, pin: form.pin.value,
+          active: form.active.checked, perms: $$('[name=perm]:checked', form).map(c => c.value)
+        });
         S.cache = {};
         $('#u-form-card', el).hidden = true;
         drawUsers();
