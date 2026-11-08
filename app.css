@@ -314,3 +314,19 @@ body::before {
 .view > .muted, .view > p.small { color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
 /* מצב פיתוח: הקוד מוצג מתחת לשם */
 .name-btn[data-pin]::after { content: "קוד " attr(data-pin); display: block; font-size: 12px; font-weight: 400; color: var(--muted); direction: ltr; }
+
+/* ---------- דף לקוח: פרטי אירוע ---------- */
+.client-view { padding-bottom: 32px; max-width: 560px; }
+.client-head { text-align: center; }
+.client-head h1 { margin: 6px 0 0; font-size: 24px; font-weight: 800; border-bottom: 3px solid var(--brand-hot); display: inline-block; padding-bottom: 4px; }
+.cf-field { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.cf-field:last-of-type { border-bottom: 0; }
+.cf-label { display: block; font-weight: 700; font-size: 14px; margin: 0 0 4px; color: var(--ink); }
+.cf-field input, .cf-field textarea { margin-top: 6px; }
+.cf-field.locked .cf-value { color: var(--ink); white-space: pre-wrap; }
+.cf-field.locked .cf-label { color: var(--muted); font-weight: 600; font-size: 13px; }
+.cf-lock { font-size: 11px; opacity: .7; }
+.cf-checks { display: flex; gap: 14px; flex-wrap: wrap; }
+.cf-progress { height: 8px; border-radius: 99px; background: rgba(0,0,0,.08); overflow: hidden; margin-top: 12px; }
+.cf-progress span { display: block; height: 100%; background: var(--brand-hot); border-radius: 99px; transition: width .4s; }
+.cf-saved { background: var(--ok-soft); color: var(--ok); padding: 10px 12px; border-radius: 10px; font-weight: 700; margin: 12px 0 0; }

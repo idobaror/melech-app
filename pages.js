@@ -452,26 +452,35 @@ function eventActionsRow(e) {
   </div>`;
 }
 
-function detailsFormSection(d, e) {
-  const f = d.detailsForm;
-  if (!f) return '';
-  const msg = `היי! כדי שנגיע מוכנים ל${e.displayName || e.name}${e.date ? ' ב-' + e.date.split('-').reverse().join('/') : ''}, נשמח שתמלאו את פרטי האירוע כאן:
-${f.url}
+// טופס תיאום ללקוח: הקישור (למי ששולח) + מה שהלקוח כבר מילא (לכל מי שרואה את האירוע)
+function clientFormLink(token) { return new URL('client.html?t=' + encodeURIComponent(token), location.href).href; }
+
+function clientFormSection(d, e) {
+  const c = d.clientForm;
+  if (!c) return '';
+  if (c.error) return `<section class="card"><h2>📋 פרטים מהלקוח</h2><p class="small warn-text">${esc(c.error)}</p></section>`;
+  const missing = c.fields.filter(f => !f.value);
+  const link = c.token ? clientFormLink(c.token) : '';
+  const msg = `היי! כדי שנגיע מוכנים ל${e.displayName || e.name}${e.date ? ' ב-' + e.date.split('-').reverse().join('/') : ''}, נשמח שתשלימו כמה פרטים כאן:
+${link}
 תודה, צוות מלך הקסטות 👑`;
-  return `<section class="card"><h2>📋 תיאום פרטים עם הלקוח</h2>
-    <p class="small muted" style="margin:0 0 6px">טופס "מלך הקסטות - פרטי אירוע", עם שם האירוע, מה חוגגים, שעת תחילה ומופעים נוספים כבר ממולאים.</p>
-    <dl class="kv"><dt>שם בטופס</dt><dd>${esc(f.title)}</dd><dt>מה חוגגים</dt><dd>${esc(f.celebrating || '—')}</dd></dl>
-    <div class="btn-row">
+  return `<section class="card"><div class="card-head"><h2>📋 פרטים מהלקוח</h2>
+      <span class="badge ${missing.length ? 'warn' : 'ok'}">${c.filled}/${c.total}</span></div>
+    <div class="cf-progress" style="margin:0 0 8px"><span style="width:${Math.round(100 * c.filled / c.total)}%"></span></div>
+    <div class="cf-list">${c.fields.filter(f => f.value).map(f => `<div class="cf-field locked"><div class="cf-label">${esc(f.label)}</div><div class="cf-value">${/^[\d\s+()-]{9,}$/.test(f.value) ? `<a dir="ltr" href="tel:${esc(f.value.replace(/[^\d+]/g, ''))}">${esc(f.value)}</a>` : esc(f.value)}</div></div>`).join('')}</div>
+    ${missing.length ? `<p class="small muted" style="margin:8px 0 0">חסר: ${missing.map(f => esc(f.label)).join(' · ')}</p>` : '<p class="small" style="margin:8px 0 0">✅ הלקוח השלים את כל הפרטים</p>'}
+    ${c.token ? `<div class="btn-row">
       ${e.phone ? `<a class="btn wa sm" target="_blank" href="${waLink(e.phone, msg)}">📲 שלח ללקוח בוואטסאפ</a>` : ''}
-      <button class="btn ghost sm" data-copy-form>📋 העתק קישור</button>
-      <a class="btn ghost sm" target="_blank" href="${esc(f.url)}">👁️ פתח טופס</a>
-    </div></section>`;
+      <button class="btn ghost sm" data-copy-client>📋 העתק קישור</button>
+      <a class="btn ghost sm" target="_blank" href="${esc(link)}">👁️ איך הלקוח רואה</a>
+    </div>` : ''}</section>`;
 }
 
-function bindDetailsForm(el, d) {
-  const b = $('[data-copy-form]', el);
+function bindClientForm(el, d) {
+  const b = $('[data-copy-client]', el);
   if (b) b.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(d.detailsForm.url); toast('הקישור הועתק'); } catch (err) { prompt('העתק את הקישור:', d.detailsForm.url); }
+    const link = clientFormLink(d.clientForm.token);
+    try { await navigator.clipboard.writeText(link); toast('הקישור הועתק'); } catch (err) { prompt('העתק את הקישור:', link); }
   });
 }
 
@@ -533,6 +542,7 @@ function renderReadOnlyEvent(el, d) {
       ${e.notes ? `<label>הערה כללית</label><div class="note-box">${esc(e.notes)}</div>` : ''}
       ${eventActionsRow(e)}
     </section>
+    ${clientFormSection(d, e)}
     <section class="card"><h2>👥 הצוות באירוע</h2>${crewReadonlyList(d)}</section>
     ${requestsSection(d, e)}
     ${e.followUp ? `<section class="card"><h2>📝 פולואפ מכירות</h2><div class="note-box">${esc(e.followUp)}</div></section>` : ''}
@@ -542,7 +552,7 @@ function renderReadOnlyEvent(el, d) {
     ${historySection(d)}`;
   bindMyConfirm(el, e);
   bindTravel(el, d, e);
-  bindDetailsForm(el, d);
+  bindClientForm(el, d);
   bindNotes(el, e);
 }
 
@@ -565,7 +575,7 @@ function renderEditableEvent(el, d, opts) {
       <p class="muted small" style="margin:0">${esc(fmtDate(e.date) || 'אין תאריך')} ${e.startTime ? '· ' + esc(e.startTime) : ''} ${e.location ? '· 📍 ' + esc(e.location) : ''}</p>
       ${eventActionsRow(e)}
     </section>
-    ${detailsFormSection(d, e)}
+    ${clientFormSection(d, e)}
 
     <section class="card">
       <h2>👥 צוות משובץ</h2>
@@ -707,7 +717,7 @@ function renderEditableEvent(el, d, opts) {
 
   bindMyConfirm(el, e);
   bindTravel(el, d, e);
-  bindDetailsForm(el, d);
+  bindClientForm(el, d);
   bindNotes(el, e);
 }
 
