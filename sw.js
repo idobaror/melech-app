@@ -1,7 +1,7 @@
 // Service worker — מטמון לקבצי האפליקציה בלבד (לא לנתונים).
 // אסטרטגיה: רשת קודם, ומטמון רק כשאין אינטרנט — כך עדכונים מגיעים מיד.
-const CACHE = 'melech-v2';
-const SHELL = ['./', 'index.html', 'app.css', 'app.js', 'pages.js', 'pages2.js', 'config.js', 'manifest.webmanifest', 'icons/icon-192.png'];
+const CACHE = 'melech-v3';
+const SHELL = ['./', 'index.html', 'app.css', 'app.js', 'pages.js', 'pages2.js', 'config.js', 'manifest.webmanifest', 'icons/icon-192.png', 'assets/bg.jpg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

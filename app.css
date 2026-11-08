@@ -278,3 +278,37 @@ details > summary { cursor: pointer; list-style-position: inside; }
 .cl-row .cl-note { grid-column: 1 / -1; font-size: 14px; padding: 8px 10px; }
 .cl-row .cl-btns { grid-column: 1 / -1; display: flex; gap: 6px; justify-content: flex-end; }
 .cl-row select, .cl-row input { padding: 9px 10px; font-size: 15px; }
+
+/* ================= עיצוב מותג — כמו טופס ההצעה והפרוטוקול הקיימים ================= */
+:root {
+  --brand: #d600d6;          /* המגנטה של הכלים הקיימים (#ff00ff בהדגשות) */
+  --brand-hot: #ff00ff;
+  --brand-soft: rgba(255, 0, 255, .1);
+  --card: rgba(255, 255, 255, .84);
+  --line: rgba(0, 0, 0, .12);
+  --bg: #2a1a33;
+}
+body { background: var(--bg); }
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: -1;
+  background: url('assets/bg.jpg') center / cover no-repeat;
+  opacity: .5;
+}
+.card, .kpi {
+  background: var(--card);
+  border: 1px solid rgba(255, 255, 255, .45);
+  border-radius: 20px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, .25);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+}
+.card h2 { border-bottom: 3px solid var(--brand-hot); padding-bottom: 8px; }
+.card-head h2 { border-bottom: 0; padding-bottom: 0; }
+.card.attention { border: 2px solid var(--brand-hot); background: rgba(255, 247, 255, .9); }
+.topbar { background: rgba(26, 16, 48, .82); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border-bottom: 3px solid var(--brand-hot); }
+.btn.secondary { background: rgba(255, 240, 255, .94); box-shadow: 0 4px 14px rgba(0, 0, 0, .18); }
+.btn.ghost { background: rgba(255, 255, 255, .85); }
+.nav { background: rgba(255, 255, 255, .9); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.login { background: transparent; }
+.login-card { background: rgba(255, 255, 255, .86); border: 1px solid rgba(255, 255, 255, .45); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.login h1 { border-bottom: 3px solid var(--brand-hot); display: inline-block; padding-bottom: 6px; }
+.view > .muted, .view > p.small { color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
