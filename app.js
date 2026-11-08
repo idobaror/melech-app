@@ -218,8 +218,7 @@ function logout() {
 const PAGES = {};
 const NAV = [
   { path: 'home', title: 'בית', ico: '🏠', perm: null },
-  { path: 'events', title: 'אירועים', ico: '🎤', perm: 'view:events_all' },
-  { path: 'calendar', title: 'יומן', ico: '📅', perm: null },
+  { path: 'events', title: 'אירועים', ico: '🎤', perm: null },   // רשימה + לוח חודשי באותו עמוד
   { path: 'quote', title: 'הצעות', ico: '📄', perm: 'quotes' },
   { path: 'protocol', title: 'הקמה', ico: '🔧', perm: 'view:protocol' },
   { path: 'requests', title: 'בקשות', ico: '📨', perm: () => can('requests') || !!S.user.hasRequests },
@@ -244,7 +243,7 @@ async function route() {
 
   const nav = NAV.find(n => n.path === r.page);
   $$('#nav a').forEach(a => a.classList.toggle('active', a.dataset.path === (page.navAs || r.page)));
-  $('#back-btn').hidden = !!nav;
+  $('#back-btn').hidden = !!nav || !!page.tab;
   setTitle(page.title || (nav && nav.title) || 'מלך הקסטות');
 
   const seq = ++renderSeq;

@@ -330,3 +330,8 @@ body::before {
 .cf-progress { height: 8px; border-radius: 99px; background: rgba(0,0,0,.08); overflow: hidden; margin-top: 12px; }
 .cf-progress span { display: block; height: 100%; background: var(--brand-hot); border-radius: 99px; transition: width .4s; }
 .cf-saved { background: var(--ok-soft); color: var(--ok); padding: 10px 12px; border-radius: 10px; font-weight: 700; margin: 12px 0 0; }
+
+/* מתג רשימה / חודש בעמוד האירועים */
+.view-switch { display: flex; gap: 4px; padding: 4px; margin-bottom: 12px; border-radius: 14px; background: rgba(255,255,255,.85); box-shadow: 0 4px 14px rgba(0,0,0,.15); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.view-switch a { flex: 1; text-align: center; padding: 9px 8px; border-radius: 10px; text-decoration: none; color: var(--ink); font-weight: 700; font-size: 14px; }
+.view-switch a.on { background: var(--night); color: #fff; }

@@ -339,22 +339,39 @@ PAGES.home = {
 // =====================================================
 // רשימת אירועים
 // =====================================================
-PAGES.events = {
-  perm: 'view:events_all', title: 'אירועים',
-  async render(el, r, alive) {
-    const events = await api('events_list');
-    if (!alive()) return;
-    S.cache.events = { v: events, t: Date.now() };
+// מתג רשימה / חודש — העמוד זוכר מה נבחר בפעם האחרונה
+function eventsViewPref(v) {
+  try { if (v) localStorage.setItem('mk_events_view', v); return localStorage.getItem('mk_events_view') || 'list'; } catch (e) { return v || 'list'; }
+}
+function eventsViewSwitch(active) {
+  return `<div class="view-switch">
+    <a href="#/events?v=list" class="${active === 'list' ? 'on' : ''}">📋 רשימה</a>
+    <a href="#/calendar" class="${active === 'calendar' ? 'on' : ''}">📅 חודש</a>
+  </div>`;
+}
 
-    const filters = [['upcoming', 'קרובים'], ['nocrew', 'בלי צוות']];
+PAGES.events = {
+  perm: null, title: 'אירועים',
+  async render(el, r, alive) {
+    if (!r.q.toString() && eventsViewPref() === 'calendar') { location.replace('#/calendar'); return; }
+    eventsViewPref('list');
+    const all = canView('events_all');
+    const events = all ? await api('events_list') : await api('my_events', { includePast: true });
+    if (!alive()) return;
+    if (all) S.cache.events = { v: events, t: Date.now() };
+
+    const filters = [['upcoming', 'קרובים']];
+    if (all) filters.push(['nocrew', 'בלי צוות']);
     if (canView('sales')) filters.push(['waiting', 'ממתינים להצעה']);
     if (canView('billing')) filters.push(['unpaid', 'לגבייה']);
-    filters.push(['past', 'עבר'], ['all', 'הכול']);
+    filters.push(['past', 'עבר']);
+    if (all) filters.push(['all', 'הכול']);
     let f = r.q.get('f') || 'upcoming';
     if (!filters.some(x => x[0] === f)) f = 'upcoming';
     let q = '';
 
     el.innerHTML = `
+      ${eventsViewSwitch('list')}
       ${can('event_create') ? '<a class="btn block" href="#/new" style="margin-bottom:12px">+ פנייה חדשה</a>' : ''}
       <input id="ev-search" type="search" placeholder="🔍 חיפוש לפי שם, מיקום או סוג" style="margin-bottom:10px">
       <div class="chips">${filters.map(([k, t]) => `<button class="chip" data-f="${k}">${t}</button>`).join('')}</div>
@@ -365,7 +382,7 @@ PAGES.events = {
       $$('.chip', el).forEach(c => c.classList.toggle('on', c.dataset.f === f));
       const list = events.filter(e => {
         if (q && !(`${e.name} ${e.location} ${e.eventType} ${e.status}`.toLowerCase().includes(q))) return false;
-        const active = e.status && e.status !== 'נפל';
+        const active = all ? e.status && e.status !== 'נפל' : true;   // "האירועים שלי" כבר בלי נופלים
         switch (f) {
           case 'upcoming': return active && e.date && e.date >= today;
           case 'nocrew': return active && e.date && e.date >= today && !e.crew;
@@ -377,10 +394,12 @@ PAGES.events = {
       });
       list.sort((a, b) => f === 'past' ? (b.date || '').localeCompare(a.date || '') : (a.date || '9999').localeCompare(b.date || '9999'));
       $('#ev-list', el).innerHTML = list.length
-        ? list.slice(0, 200).map(e => eventItem(e, esc([e.eventType, e.location].filter(Boolean).join(' · ')),
-            statusBadge(e.status) + (e.crew ? ` <span class="badge">👥 ${e.crew}</span>` : ''))).join('')
-        : '<p class="empty">לא נמצאו אירועים</p>';
+        ? list.slice(0, 200).map(e => all
+            ? eventItem(e, esc([e.eventType, e.location].filter(Boolean).join(' · ')), statusBadge(e.status) + (e.crew ? ` <span class="badge">👥 ${e.crew}</span>` : ''))
+            : eventItem(e, esc([e.myRole, e.location].filter(Boolean).join(' · ')), confirmBadge(e))).join('')
+        : `<p class="empty">${all ? 'לא נמצאו אירועים' : 'אין אירועים שאתה משובץ אליהם'}</p>`;
     };
+    if (!all) $('#ev-search', el).placeholder = '🔍 חיפוש באירועים שלי';
     $$('.chip', el).forEach(c => c.addEventListener('click', () => { f = c.dataset.f; history.replaceState(null, '', `#/events?f=${f}`); draw(); }));
     $('#ev-search', el).addEventListener('input', e => { q = e.target.value.trim().toLowerCase(); draw(); });
     draw();
@@ -727,8 +746,9 @@ function renderEditableEvent(el, d, opts) {
 const MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
 
 PAGES.calendar = {
-  perm: null, title: 'יומן',
+  perm: null, title: 'אירועים', navAs: 'events', tab: true,
   async render(el, r, alive) {
+    eventsViewPref('calendar');
     const month = /^\d{4}-\d{2}$/.test(r.q.get('m') || '') ? r.q.get('m') : todayIso().slice(0, 7);
     const d = await api('calendar', { month });
     if (!alive()) return;
@@ -762,6 +782,7 @@ PAGES.calendar = {
     };
 
     el.innerHTML = `
+      ${eventsViewSwitch('calendar')}
       <section class="card cal ${blockMode ? 'block-mode' : ''}">
         <div class="cal-head">
           <a class="icon-btn dark" href="#/calendar?m=${shift(-1)}${blockMode ? '&block=1' : ''}" aria-label="חודש קודם">→</a>
