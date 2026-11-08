@@ -12,11 +12,15 @@ function esc(v) {
 }
 
 // הרשאות: "admin" פותח הכול
+// 'x' = הרשאת x · 'view:x' = הרשאת x או "צפייה בכל דבר" · פונקציה = תנאי מותאם
 function can(perm) {
   if (!S.user) return false;
   if (!perm) return true;
+  if (typeof perm === 'function') return perm();
+  if (perm.indexOf('view:') === 0) return can(perm.slice(5)) || can('view_all');
   return S.user.perms.indexOf('admin') >= 0 || S.user.perms.indexOf(perm) >= 0;
 }
+const canView = perm => can('view:' + perm);
 
 const DAYS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
 function parseIso(iso) {
@@ -214,10 +218,11 @@ function logout() {
 const PAGES = {};
 const NAV = [
   { path: 'home', title: 'בית', ico: '🏠', perm: null },
-  { path: 'events', title: 'אירועים', ico: '🎤', perm: 'events_all' },
+  { path: 'events', title: 'אירועים', ico: '🎤', perm: 'view:events_all' },
   { path: 'calendar', title: 'יומן', ico: '📅', perm: null },
   { path: 'quote', title: 'הצעות', ico: '📄', perm: 'quotes' },
-  { path: 'protocol', title: 'הקמה', ico: '🔧', perm: 'protocol' },
+  { path: 'protocol', title: 'הקמה', ico: '🔧', perm: 'view:protocol' },
+  { path: 'requests', title: 'בקשות', ico: '📨', perm: () => can('requests') || !!S.user.hasRequests },
   { path: 'settings', title: 'הגדרות', ico: '⚙️', perm: null }
 ];
 
