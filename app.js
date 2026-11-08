@@ -147,7 +147,7 @@ function showNamePicker() {
   box.innerHTML = `
     <p class="muted small" style="margin:18px 0 10px">מי אתה?</p>
     ${loginUsers.length > 8 ? '<input id="name-filter" type="search" placeholder="🔍 חפש שם" style="margin-bottom:10px">' : ''}
-    <div class="name-list">${loginUsers.map(u => `<button class="name-btn" data-uid="${esc(u.id)}">${esc(u.name)}</button>`).join('')}</div>`;
+    <div class="name-list">${loginUsers.map(u => `<button class="name-btn" data-uid="${esc(u.id)}"${CFG.DEV_PINS && CFG.DEV_PINS[u.name] ? ` data-pin="${esc(CFG.DEV_PINS[u.name])}"` : ''}>${esc(u.name)}</button>`).join('')}</div>`;
   $$('[data-uid]', box).forEach(b => b.addEventListener('click', () => {
     setLoginError('');
     showPinPad(loginUsers.find(u => u.id === b.dataset.uid));
