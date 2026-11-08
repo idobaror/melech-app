@@ -452,6 +452,29 @@ function eventActionsRow(e) {
   </div>`;
 }
 
+function detailsFormSection(d, e) {
+  const f = d.detailsForm;
+  if (!f) return '';
+  const msg = `היי! כדי שנגיע מוכנים ל${e.displayName || e.name}${e.date ? ' ב-' + e.date.split('-').reverse().join('/') : ''}, נשמח שתמלאו את פרטי האירוע כאן:
+${f.url}
+תודה, צוות מלך הקסטות 👑`;
+  return `<section class="card"><h2>📋 תיאום פרטים עם הלקוח</h2>
+    <p class="small muted" style="margin:0 0 6px">טופס "מלך הקסטות - פרטי אירוע", עם שם האירוע, מה חוגגים, שעת תחילה ומופעים נוספים כבר ממולאים.</p>
+    <dl class="kv"><dt>שם בטופס</dt><dd>${esc(f.title)}</dd><dt>מה חוגגים</dt><dd>${esc(f.celebrating || '—')}</dd></dl>
+    <div class="btn-row">
+      ${e.phone ? `<a class="btn wa sm" target="_blank" href="${waLink(e.phone, msg)}">📲 שלח ללקוח בוואטסאפ</a>` : ''}
+      <button class="btn ghost sm" data-copy-form>📋 העתק קישור</button>
+      <a class="btn ghost sm" target="_blank" href="${esc(f.url)}">👁️ פתח טופס</a>
+    </div></section>`;
+}
+
+function bindDetailsForm(el, d) {
+  const b = $('[data-copy-form]', el);
+  if (b) b.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(d.detailsForm.url); toast('הקישור הועתק'); } catch (err) { prompt('העתק את הקישור:', d.detailsForm.url); }
+  });
+}
+
 function sameDaySection(d, e) {
   if (!d.sameDay || !d.sameDay.length) return '';
   return `<section class="card"><h2>🗓️ עוד באותו יום (${d.sameDay.length})</h2>
@@ -519,6 +542,7 @@ function renderReadOnlyEvent(el, d) {
     ${historySection(d)}`;
   bindMyConfirm(el, e);
   bindTravel(el, d, e);
+  bindDetailsForm(el, d);
   bindNotes(el, e);
 }
 
@@ -541,6 +565,7 @@ function renderEditableEvent(el, d, opts) {
       <p class="muted small" style="margin:0">${esc(fmtDate(e.date) || 'אין תאריך')} ${e.startTime ? '· ' + esc(e.startTime) : ''} ${e.location ? '· 📍 ' + esc(e.location) : ''}</p>
       ${eventActionsRow(e)}
     </section>
+    ${detailsFormSection(d, e)}
 
     <section class="card">
       <h2>👥 צוות משובץ</h2>
@@ -682,6 +707,7 @@ function renderEditableEvent(el, d, opts) {
 
   bindMyConfirm(el, e);
   bindTravel(el, d, e);
+  bindDetailsForm(el, d);
   bindNotes(el, e);
 }
 
