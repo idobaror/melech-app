@@ -88,7 +88,40 @@ function toast(msg, type = '') {
 }
 
 // ---------- API ----------
+// מהירות: מסך שכבר ראית מוצג מיד מהזיכרון, ובמקביל נטען מהשרת — אם השתנה משהו, המסך מתרענן בשקט.
+// כל פעולת כתיבה מוחקת את הזיכרון, כך שאחרי שמירה תמיד רואים נתונים טריים.
+const READ_ACTIONS = new Set(['me', 'home', 'my_events', 'calendar', 'event_get', 'events_list', 'event_options', 'quote_options',
+  'notes_list', 'req_list', 'req_get', 'summary_get', 'protocol_get', 'protocol_list', 'checklist_get', 'checklists_list',
+  'products_list', 'users_list']);
+const SWR = {};            // מפתח → { v, t }
+let rendering = false;     // רק קריאות שנעשות בזמן ציור מסך משתמשות בזיכרון
+let viewDirty = false;     // המשתמש התחיל להקליד — לא מרעננים לו את המסך מתחת לידיים
+
 async function api(action, payload, extra) {
+  if (!READ_ACTIONS.has(action)) {
+    for (const k in SWR) delete SWR[k];
+    S.cache.events = null;   // רשימות בחירה (opts) נשארות — משתנות רק בהגדרות, ושם מנקים אותן
+    return apiNet(action, payload, extra);
+  }
+  const key = action + ':' + JSON.stringify(payload || {});
+  const hit = SWR[key];
+  if (hit && rendering) {
+    if (Date.now() - hit.t > 5000) {
+      const seq = renderSeq;
+      apiNet(action, payload, extra).then(v => {
+        const changed = JSON.stringify(v) !== JSON.stringify(hit.v);
+        SWR[key] = { v, t: Date.now() };
+        if (changed && seq === renderSeq && !viewDirty && !$('#view').contains(document.activeElement)) route(true);
+      }).catch(() => {});
+    }
+    return JSON.parse(JSON.stringify(hit.v));
+  }
+  const v = await apiNet(action, payload, extra);
+  SWR[key] = { v, t: Date.now() };
+  return JSON.parse(JSON.stringify(v));
+}
+
+async function apiNet(action, payload, extra) {
   const body = Object.assign({ action, session: S.session, payload: payload || {} }, extra || {});
   let res;
   try {
@@ -237,8 +270,10 @@ function parseHash() {
 }
 
 let renderSeq = 0;
-async function route() {
+// silent: ריענון שקט אחרי שהגיעו נתונים חדשים — בלי ספינר ובלי לקפוץ לראש הדף
+async function route(silent) {
   if (!S.user) return;
+  silent = silent === true;
   const r = parseHash();
   const page = PAGES[r.page];
   const view = $('#view');
@@ -251,10 +286,15 @@ async function route() {
   setTitle(page.title || (nav && nav.title) || 'מלך הקסטות');
 
   const seq = ++renderSeq;
-  view.innerHTML = '<div class="spinner dark"></div>';
-  window.scrollTo(0, 0);
+  const scrollY = window.scrollY;
+  if (!silent) { view.innerHTML = '<div class="spinner dark"></div>'; window.scrollTo(0, 0); }
+  viewDirty = false;
+  rendering = true;
   try {
-    await page.render(view, r, () => seq === renderSeq);
+    const p = page.render(view, r, () => seq === renderSeq);
+    rendering = false;   // רק הקריאות שהדף שולח מיד (לפני await) נחשבות לציור המסך
+    await p;
+    if (silent) window.scrollTo(0, scrollY);
   } catch (e) {
     if (seq !== renderSeq || e.code === 'AUTH') return;
     view.innerHTML = `<div class="card"><p class="empty">⚠️ ${esc(e.message)}</p><button class="btn block secondary" onclick="route()">נסה שוב</button></div>`;
@@ -279,7 +319,8 @@ function startApp() {
   route();
 }
 
-window.addEventListener('hashchange', route);
+window.addEventListener('hashchange', () => route());
+['input', 'change'].forEach(t => document.addEventListener(t, ev => { if (ev.target.closest && ev.target.closest('#view')) viewDirty = true; }, true));
 
 if ('serviceWorker' in navigator && !CFG.DEV_PINS) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));

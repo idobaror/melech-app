@@ -13,10 +13,13 @@ function eventItem(e, sub, extraBadge, href) {
   </a>`;
 }
 
-function listCard(title, items, emptyText, headExtra, id) {
+// max/moreHref: מסך קומפקטי — מציג את הראשונים וקישור ל"עוד"
+function listCard(title, items, emptyText, headExtra, id, max, moreHref) {
+  const shown = max ? items.slice(0, max) : items;
+  const more = items.length - shown.length;
   return `<section class="card"${id ? ` id="${id}"` : ''}>
     <div class="card-head"><h2>${title}</h2>${headExtra || ''}</div>
-    ${items.length ? `<div class="list">${items.join('')}</div>` : `<p class="empty">${emptyText}</p>`}
+    ${items.length ? `<div class="list">${shown.join('')}</div>${more > 0 ? `<a class="more-link" href="${moreHref || '#/events'}">עוד ${more} ›</a>` : ''}` : `<p class="empty">${emptyText}</p>`}
   </section>`;
 }
 
@@ -43,6 +46,7 @@ function eventDetailLines(e, cf) {
     v('celebrating') ? `🎉 מה חוגגים: ${v('celebrating')}` : null,
     v('startTime') && v('startTime') !== e.startTime ? `🕘 תחילת האירוע (כניסת קהל): ${v('startTime')}` : null,
     e.amplification ? `🔊 הגברה: ${e.amplification}` : null,
+    e.guestCount ? `👥 אורחים: ${e.guestCount}` : null,
     v('venueHas') ? `🏛️ יש במקום: ${v('venueHas')}` : null,
     e.additionalShows || v('shows') ? `🎶 מופעים נוספים: ${e.additionalShows || v('shows')}` : null,
     e.notes ? `📝 ${e.notes}` : null
@@ -282,7 +286,7 @@ PAGES.home = {
     const d = await api('home');
     if (!alive()) return;
     const c = d.counts;
-    let h = `<p class="muted" style="margin:0 0 12px">שלום ${esc(S.user.name)} 👋</p>`;
+    let h = `<p class="muted" style="margin:0 0 8px">שלום ${esc(S.user.name)} 👋</p>`;
 
     // בקשות שמחכות לי — הכי למעלה
     if (d.requestsToMe.length) {
@@ -302,7 +306,7 @@ PAGES.home = {
     const actions = [];
     if (can('event_create') && writeOn('MAIN')) actions.push('<a class="btn" href="#/new">+ פנייה חדשה</a>');
     if (can('requests')) actions.push('<a class="btn secondary" href="#/request-new">📨 שאלה / בקשת אישור</a>');
-    if (actions.length) h += `<div class="btn-row" style="margin:0 0 14px">${actions.join('')}</div>`;
+    if (actions.length) h += `<div class="chips-row" style="margin:0 0 10px">${actions.join('').replace(/class="btn secondary"/g, 'class="chip-btn"').replace(/class="btn"/g, 'class="chip-btn brand"')}</div>`;
 
     // אירועים שלי — עם בקשת אישור הגעה
     const mine = d.myEvents.map(e => eventItem(e, esc([e.startTime, e.location].filter(Boolean).join(' · ')),
@@ -328,25 +332,25 @@ PAGES.home = {
     if (d.waitingForQuote) {
       h += listCard('⏳ ממתינים להצעת מחיר', d.waitingForQuote.map(e => can('quotes')
         ? eventItem(e, null, '<span class="badge brand">📄 להצעה</span>', `#/quote?row=${e.row}&k=${encodeURIComponent(e.key)}`)
-        : eventItem(e)), 'אין פניות שממתינות להצעה 🎉');
+        : eventItem(e)), 'אין פניות שממתינות להצעה 🎉', '', '', 4, canView('events_all') ? '#/events?f=waiting' : '#/quote');
     }
     if (d.upcoming) {
       h += listCard('📅 אירועים קרובים', d.upcoming.map(e =>
         eventItem(e, null, e.hasCrew ? '' : '<span class="badge warn">ללא צוות</span>')),
-        'אין אירועים קרובים', '<a class="small" href="#/events?f=upcoming">הכול</a>');
+        'אין אירועים קרובים', '', '', 5, '#/events?f=upcoming');
     }
     if (d.unpaid && d.unpaid.length) {
-      h += listCard('💰 לגבייה — קרו ולא שולמו', d.unpaid.map(e => eventItem(e, esc(e.total != null ? `נחתם ${money(e.total)} · שולם ${money(e.total - e.balance)}` : (e.officeStatus || 'לא הוזן סכום')), `<span class="badge bad">${e.balance != null ? 'יתרה ' + money(e.balance) : 'לגבות'}</span>`)), '');
+      h += listCard('💰 לגבייה — קרו ולא שולמו', d.unpaid.map(e => eventItem(e, esc(e.total != null ? `נחתם ${money(e.total)} · שולם ${money(e.total - e.balance)}` : (e.officeStatus || 'לא הוזן סכום')), `<span class="badge bad">${e.balance != null ? 'יתרה ' + money(e.balance) : 'לגבות'}</span>`)), '', '', '', 4, '#/events?f=unpaid');
     }
     if (d.newRequests && d.newRequests.length) {
-      h += listCard('🆕 פניות מהשבוע האחרון', d.newRequests.map(e => eventItem(e, null, statusBadge(e.status))), '');
+      h += listCard('🆕 פניות מהשבוע האחרון', d.newRequests.map(e => eventItem(e, null, statusBadge(e.status))), '', '', '', 4, '#/events');
     }
     if (d.followUps && d.followUps.length) {
-      h += `<section class="card"><h2>📝 פולואפ מכירות</h2>${d.followUps.map(e => `
+      h += `<section class="card"><h2>📝 פולואפ מכירות</h2>${d.followUps.slice(0, 4).map(e => `
         <a class="item" href="${eventHref(e)}" style="align-items:flex-start">
           ${dateBox(e.date)}
           <div class="grow"><div class="title">${esc(e.name)} ${statusBadge(e.status)}</div>
-          <div class="note-box" style="margin-top:6px;max-height:90px">${esc(e.followUp)}</div></div>
+          <div class="small muted clamp2">${esc(e.followUp.split(/\n/).filter(Boolean).slice(-1)[0] || '')}</div></div>
         </a>`).join('')}</section>`;
     }
     if (!kpis.length) h += `<a class="btn ghost block" href="#/calendar">📅 ליומן שלי</a>`;
@@ -492,11 +496,9 @@ PAGES.event = {
     const row = r.arg, key = r.q.get('k') || '';
     const d = await api('event_get', { row, key });
     if (!alive()) return;
-    // אין עריכה ואין שיבוץ → כרטיס לקריאה (גם למי שרואה הכול, כמו הבעלים)
-    if (!d.canEdit.length && !d.users && !can('sales')) return renderReadOnlyEvent(el, d);
-    const opts = await eventOptions();
+    const opts = d.canEdit.length || d.users ? await eventOptions() : {};
     if (!alive()) return;
-    renderEditableEvent(el, d, opts);
+    renderEvent(el, d, opts);
   }
 };
 
@@ -512,81 +514,16 @@ function eventActionsRow(e) {
 // טופס תיאום ללקוח: הקישור (למי ששולח) + מה שהלקוח כבר מילא (לכל מי שרואה את האירוע)
 function clientFormLink(token) { return new URL('client.html?t=' + encodeURIComponent(token), location.href).href; }
 
-function clientFormSection(d, e) {
-  const c = d.clientForm;
-  if (!c) return '';
-  if (c.error) return `<section class="card"><h2>📋 פרטים מהלקוח</h2><p class="small warn-text">${esc(c.error)}</p></section>`;
-  const missing = c.fields.filter(f => !f.value);
-  const link = c.token ? clientFormLink(c.token) : '';
-  const msg = `היי! כדי שנגיע מוכנים ל${e.displayName || e.name}${e.date ? ' ב-' + e.date.split('-').reverse().join('/') : ''}, נשמח שתשלימו כמה פרטים כאן:
-${link}
-תודה, צוות מלך הקסטות 👑`;
-  return `<section class="card" id="cf-card"><div class="card-head"><h2>📋 פרטים מהלקוח</h2>
-      <span class="badge ${missing.length ? 'warn' : 'ok'}">${c.filled}/${c.total}</span></div>
-    <div class="cf-progress" style="margin:0 0 8px"><span style="width:${Math.round(100 * c.filled / c.total)}%"></span></div>
-    <div class="cf-list">${c.fields.filter(f => f.value).map(f => `<div class="cf-field locked"><div class="cf-label">${esc(f.label)}</div><div class="cf-value">${/^[\d\s+()-]{9,}$/.test(f.value) ? `<a dir="ltr" href="tel:${esc(f.value.replace(/[^\d+]/g, ''))}">${esc(f.value)}</a>` : esc(f.value)}</div></div>`).join('')}</div>
-    ${missing.length ? `<p class="small muted" style="margin:8px 0 0">חסר: ${missing.map(f => esc(f.label)).join(' · ')}</p>` : '<p class="small" style="margin:8px 0 0">✅ הלקוח השלים את כל הפרטים</p>'}
-    ${c.token ? `<div class="btn-row">
-      ${e.phone ? `<a class="btn wa sm" target="_blank" href="${waLink(e.phone, msg)}">📲 שלח ללקוח בוואטסאפ</a>` : ''}
-      <button class="btn ghost sm" data-copy-client>📋 העתק קישור</button>
-      <a class="btn ghost sm" target="_blank" href="${esc(link)}">👁️ איך הלקוח רואה</a>
-    </div>
-    ${writeOn('CLIENT_FORM') ? '<button class="btn secondary block" data-staff-fill style="margin-top:10px">✏️ מלא / תקן בשם הלקוח</button>' : ''}
-    <form id="cf-staff" hidden>
-      <p class="small muted" style="margin:12px 0 0">למשל אחרי שיחה עם הלקוח. אפשר להשלים וגם לתקן — הכול נרשם ביומן השינויים.</p>
-      ${c.fields.map(staffFieldHtml).join('')}
-      <div class="btn-row">
-        <button class="btn" type="submit">שמור</button>
-        <button class="btn ghost" type="button" data-staff-cancel>ביטול</button>
-      </div>
-    </form>` : ''}</section>`;
-}
-
 function staffFieldHtml(f) {
+  const n = 'cf_' + f.id;   // קידומת: לאירוע וללקוח יש שדות באותו שם (startTime)
   const lbl = `<label class="cf-label">${esc(f.label)}${f.id === 'title' ? ' 🔒' : ''}</label>`;
   if (f.id === 'title') return `<div class="cf-field">${lbl}<div class="cf-value">${esc(f.value)}</div><div class="small muted">לפי השם הזה תיקי ההפקה מוצאים את הפרטים — משנים אותו בגיליון</div></div>`;
   if (f.type === 'checks') {
     const on = f.value.split(',').map(s => s.trim());
-    return `<div class="cf-field">${lbl}<div class="cf-checks">${f.options.map(o => `<label class="perm-item"><input type="checkbox" name="${f.id}" value="${esc(o)}" ${on.indexOf(o) >= 0 ? 'checked' : ''}> ${esc(o)}</label>`).join('')}</div></div>`;
+    return `<div class="cf-field">${lbl}<div class="cf-checks">${f.options.map(o => `<label class="perm-item"><input type="checkbox" name="${n}" value="${esc(o)}" ${on.indexOf(o) >= 0 ? 'checked' : ''}> ${esc(o)}</label>`).join('')}</div></div>`;
   }
-  if (f.type === 'textarea') return `<div class="cf-field">${lbl}<textarea name="${f.id}" rows="2" maxlength="500">${esc(f.value)}</textarea></div>`;
-  return `<div class="cf-field">${lbl}<input name="${f.id}" maxlength="500" value="${esc(f.value)}"${f.type === 'tel' ? ' type="tel" inputmode="tel" dir="ltr"' : ''}></div>`;
-}
-
-function bindClientForm(el, d) {
-  const b = $('[data-copy-client]', el);
-  if (b) b.addEventListener('click', async () => {
-    const link = clientFormLink(d.clientForm.token);
-    try { await navigator.clipboard.writeText(link); toast('הקישור הועתק'); } catch (err) { prompt('העתק את הקישור:', link); }
-  });
-  const form = $('#cf-staff', el);
-  if (!form) return;
-  const openBtn = $('[data-staff-fill]', el);
-  if (!openBtn) return;
-  openBtn.addEventListener('click', () => { form.hidden = false; openBtn.hidden = true; const first = form.querySelector('input:not([type=checkbox]), textarea'); if (first) first.focus(); });
-  $('[data-staff-cancel]', el).addEventListener('click', () => { form.hidden = true; openBtn.hidden = false; });
-  form.addEventListener('submit', async ev => {
-    ev.preventDefault();
-    const values = {};
-    d.clientForm.fields.forEach(f => {
-      if (f.id === 'title') return;
-      values[f.id] = f.type === 'checks'
-        ? [...form.querySelectorAll(`[name="${f.id}"]:checked`)].map(x => x.value)
-        : form.elements[f.id].value.trim();
-    });
-    const btn = form.querySelector('button[type=submit]');
-    btn.disabled = true; btn.textContent = 'שומר…';
-    try {
-      d.clientForm = await api('client_staff_save', { row: d.event.row, key: d.event.key, values });
-      toast('נשמר ✓', 'ok');
-      const card = $('#cf-card', el);
-      card.outerHTML = clientFormSection(d, d.event);
-      bindClientForm(el, d);
-    } catch (e) {
-      toast(e.message, 'bad');
-      btn.disabled = false; btn.textContent = 'שמור';
-    }
-  });
+  if (f.type === 'textarea') return `<div class="cf-field">${lbl}<textarea name="${n}" rows="2" maxlength="500">${esc(f.value)}</textarea></div>`;
+  return `<div class="cf-field">${lbl}<input name="${n}" maxlength="500" value="${esc(f.value)}"${f.type === 'tel' ? ' type="tel" inputmode="tel" dir="ltr"' : ''}></div>`;
 }
 
 function sameDaySection(d, e) {
@@ -636,7 +573,10 @@ function billingSection(d) {
     : b.balance <= 0 ? '<span class="badge ok">שולם במלואו</span>'
     : `<span class="badge bad">יתרה ${money(b.balance)}</span>`;
   return `<section class="card" id="bill-card"><div class="card-head"><h2>💰 גבייה</h2>${state}</div>
-    <dl class="kv">
+    <dl class="kv kv-compact">
+      ${'officeStatus' in d.event ? `<dt>סטטוס גבייה</dt><dd>${d.canEdit.indexOf('officeStatus') >= 0
+        ? `<span class="inline-edit"><input id="bill-office" value="${esc(d.event.officeStatus || '')}" placeholder="למשל: הושלם"><button class="btn sm" type="button" id="bill-office-save">שמור</button></span>`
+        : esc(d.event.officeStatus || '—')}</dd>` : ''}
       <dt>סכום שנחתם</dt><dd><b>${money(b.total)}</b>${b.total != null ? ` <span class="small muted">כולל מע"מ · ${money(b.beforeVat)} לפני</span>` : ''}</dd>
       <dt>שולם</dt><dd>${money(b.paid)}</dd>
       ${b.total != null ? `<dt>יתרה</dt><dd><b>${money(b.balance)}</b></dd>` : ''}
@@ -688,6 +628,14 @@ function bindBilling(el, d) {
     catch (err) { toast(err.message, 'bad'); } finally { busy(false); }
   });
   submit(forms.pay, 'billing_add_payment', 'התשלום נרשם ✅');
+  const os = $('#bill-office-save', card);
+  if (os) os.addEventListener('click', async () => {
+    const v = $('#bill-office', card).value.trim();
+    if (v === (e.officeStatus || '')) return toast('אין שינוי');
+    busy(true, 'שומר…');
+    try { await api('event_update', { row: e.row, key: e.key, fields: { officeStatus: v } }); e.officeStatus = v; toast('סטטוס הגבייה נשמר ✅', 'ok'); }
+    catch (err) { toast(err.message, 'bad'); } finally { busy(false); }
+  });
   submit(forms.total, 'billing_set_total', 'הסכום נשמר ✅');
   $$('[data-bill-cancel]', card).forEach(btn => btn.addEventListener('click', async () => {
     const p = d.billing.payments.find(x => x.id === btn.dataset.billCancel);
@@ -704,191 +652,257 @@ function crewReadonlyList(d) {
     ${confirmBadge(c)}</div>`).join('') || '<p class="empty">עוד לא שובץ צוות</p>';
 }
 
-function renderReadOnlyEvent(el, d) {
-  const e = d.event;
-  setTitle(e.displayName || e.name);
-  el.innerHTML = `
-    ${myConfirmSection(d)}
-    <section class="card">
-      <div class="card-head"><h2>${esc(e.displayName || e.name)}</h2>${statusBadge(e.status)}</div>
-      <dl class="kv">
-        <dt>תאריך</dt><dd>${esc(fmtDate(e.date) || e.dateText || '—')}</dd>
-        <dt>שעת עלייה</dt><dd>${esc(e.startTime || '—')}</dd>
-        <dt>מוצר</dt><dd>${esc(e.eventType || '—')}</dd>
-        <dt>מיקום</dt><dd>${esc(e.location || '—')}</dd>
-        <dt>הגברה</dt><dd>${esc(e.amplification || '—')}</dd>
-        ${e.phone ? `<dt>איש קשר</dt><dd><a href="tel:${esc(e.phone)}">${esc(e.phone)}</a></dd>` : ''}
-        ${e.additionalShows ? `<dt>מופעים נוספים</dt><dd>${esc(e.additionalShows)}</dd>` : ''}
-        ${'price' in e ? `<dt>מחיר</dt><dd>${esc(e.price || '—')}</dd>` : ''}
-        ${'officeStatus' in e ? `<dt>גבייה</dt><dd>${esc(e.officeStatus || '—')}</dd>` : ''}
-      </dl>
-      ${e.notes ? `<label>הערה כללית</label><div class="note-box">${esc(e.notes)}</div>` : ''}
-      ${eventActionsRow(e)}
-    </section>
-    ${clientFormSection(d, e)}
-    <section class="card"><h2>👥 הצוות באירוע</h2>${crewReadonlyList(d)}</section>
-    ${requestsSection(d, e)}
-    ${e.followUp ? `<section class="card"><h2>📝 פולואפ מכירות</h2><div class="note-box">${esc(e.followUp)}</div></section>` : ''}
-    ${billingSection(d)}
-    ${sameDaySection(d, e)}
-    ${quotesSection(d)}
-    ${notesSection(d.notes)}
-    ${historySection(d)}`;
-  bindMyConfirm(el, e);
-  bindTravel(el, d, e);
-  bindClientForm(el, d);
-  bindBilling(el, d);
-  bindNotes(el, e);
+// =====================================================
+// מסך אירוע — מאוחד וקומפקטי
+//   כרטיס אחד לכל הפרטים (מהגיליון + מהלקוח, לא משנה מאיפה הגיע המידע), עריכה אחת לכולם,
+//   "העתק פרטים" עם כל המידע (בלי גבייה), שיבוץ צוות, גבייה (רק למורשים), ושאר הקטעים מקופלים.
+// =====================================================
+const cfVal = (cf, id) => { const f = cf && cf.fields ? cf.fields.find(x => x.id === id) : null; return f ? f.value : ''; };
+const isPhone = v => /^[\d\s+()-]{9,}$/.test(String(v || '').trim());
+const telHtml = v => isPhone(v) ? `<a dir="ltr" href="tel:${esc(String(v).replace(/[^\d+]/g, ''))}">${esc(v)}</a>` : esc(v);
+
+// כל השדות של האירוע במקום אחד — לתצוגה (והעתקה משתמשת באותו מקור: eventDetailLines)
+function eventFieldRows(e, cf) {
+  const v = id => cfVal(cf, id);
+  const address = v('address');
+  return [
+    ['תאריך', esc(fmtDate(e.date) || e.dateText || '')],
+    ['שעת עלייה', esc(e.startTime || '')],
+    ['כניסת קהל', v('startTime') && v('startTime') !== e.startTime ? esc(v('startTime')) : ''],
+    ['מיקום', e.location ? `${esc(e.location)} <a class="small" href="${wazeLink(address || e.location)}" target="_blank">ניווט</a>` : ''],
+    ['כתובת מדויקת', address && address !== e.location ? esc(address) : ''],
+    ['מוצר', esc(e.eventType || '')],
+    ['הגברה', esc(e.amplification || '')],
+    ['אורחים', esc(e.guestCount || '')],
+    ['מה חוגגים', esc(v('celebrating'))],
+    ['יש במקום', esc(v('venueHas'))],
+    ['מופעים נוספים', esc(e.additionalShows || v('shows'))],
+    ['הערה', esc(e.notes || '')],
+    ['לקוח', e.phone ? telHtml(e.phone) : ''],
+    ['מנהל/מפיק', telHtml(v('producerPhone'))],
+    ['איש טכני', telHtml(v('techPhone'))],
+    ['ספק הגברה', telHtml(v('ampPhone'))],
+    ["דיג'יי", telHtml(v('dj'))]
+  ].filter(r => r[1]);
 }
 
-function renderEditableEvent(el, d, opts) {
+function eventCopyText(e, cf) {
+  return [`🎤 *${e.displayName || e.name}*`, ...eventDetailLines(e, cf), '', `${APP_URL}${eventHref(e)}`].join('\n');
+}
+
+function detailsCard(d, opts) {
+  const e = d.event, cf = d.clientForm;
+  const missing = cf && cf.fields ? cf.fields.filter(f => !f.value && f.id !== 'title') : [];
+  const link = cf && cf.token ? clientFormLink(cf.token) : '';
+  const clientMsg = `היי! כדי שנגיע מוכנים ל${e.displayName || e.name}${e.date ? ' ב-' + e.date.split('-').reverse().join('/') : ''}, נשמח שתשלימו כמה פרטים כאן:\n${link}\nתודה, צוות מלך הקסטות 👑`;
+  const canStaffFill = cf && cf.token && writeOn('CLIENT_FORM') && (can('event_edit') || can('sales'));
+  const canEditAny = d.canEdit.length || canStaffFill;
+  return `<section class="card ev-card" id="ev-card">
+    <div class="card-head"><h2>${esc(e.displayName || e.name)}</h2>${statusBadge(e.status)}</div>
+    <dl class="kv kv-compact">${eventFieldRows(e, cf).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
+    ${cf && cf.error ? `<p class="small warn-text" style="margin:6px 0 0">${esc(cf.error)}</p>` : ''}
+    ${missing.length ? `<p class="small muted" style="margin:8px 0 0">🕓 חסר מהלקוח: ${missing.map(f => esc(f.label)).join(' · ')}</p>` : cf && cf.fields ? '<p class="small" style="margin:8px 0 0">✅ הלקוח השלים את כל הפרטים</p>' : ''}
+    <div class="chips-row">
+      ${e.phone ? `<a class="chip-btn wa" href="${waLink(e.phone)}" target="_blank">וואטסאפ</a><a class="chip-btn" href="tel:${esc(e.phone)}">📞 חייג</a>` : ''}
+      <button class="chip-btn" type="button" id="ev-copy">📋 העתק פרטים</button>
+      ${link && e.phone && missing.length ? `<a class="chip-btn" target="_blank" href="${waLink(e.phone, clientMsg)}">📲 טופס ללקוח</a>` : ''}
+      ${link ? `<button class="chip-btn" type="button" id="ev-copy-link">🔗 קישור ללקוח</button>` : ''}
+      ${can('quotes') ? `<a class="chip-btn" href="#/quote?row=${e.row}&k=${encodeURIComponent(e.key)}">📄 הצעה</a>` : ''}
+      ${can('protocol') ? `<a class="chip-btn" href="#/protocol?row=${e.row}&k=${encodeURIComponent(e.key)}">🔧 הקמה</a>` : ''}
+      ${canEditAny ? `<button class="chip-btn brand" type="button" id="ev-edit-open">✏️ עריכה</button>` : ''}
+    </div>
+    ${canEditAny ? editForm(d, opts, canStaffFill) : ''}
+    ${!writeOn('MAIN') && d.canEdit.length === 0 && (can('event_edit') || can('sales')) ? `<p class="small muted" style="margin:8px 0 0">${PARALLEL_NOTE}</p>` : ''}
+  </section>`;
+}
+
+function editForm(d, opts, canStaffFill) {
   const e = d.event;
-  const editable = f => d.canEdit.indexOf(f) >= 0;
-  setTitle(e.displayName || e.name);
-  let crew = d.crew.map(c => ({ userId: c.userId, name: c.name, role: c.role, note: c.note, confirm: c.confirm, confirmNote: c.confirmNote }));
+  const ed = f => d.canEdit.indexOf(f) >= 0;
+  const input = (name, val, type = 'text') => `<input name="${name}" type="${type}" value="${esc(val || '')}" ${ed(name) ? '' : 'disabled'}>`;
+  const select = (name, list, val, ph) => `<select name="${name}" ${ed(name) ? '' : 'disabled'}>${optionsHtml(list, val, ph)}</select>`;
+  const f = (label, html) => `<div><label>${label}</label>${html}</div>`;
+  const cf = d.clientForm;
+  return `<form id="ev-form" hidden>
+    ${d.canEdit.length ? `
+    <label>שם אירוע</label>${input('name', e.name)}
+    <div class="grid2">
+      ${f('סטטוס', select('status', opts.statusOptions, e.status, '— ממתין להצעה —'))}
+      ${f('טלפון לקוח', input('phone', e.phone, 'tel'))}
+      ${f('תאריך', input('date', e.date, 'date'))}
+      ${f('שעת עלייה', input('startTime', e.startTime))}
+      ${f('מוצר', select('eventType', opts.eventTypeOptions, e.eventType))}
+      ${f('הגברה', select('amplification', opts.amplificationOptions, e.amplification))}
+    </div>
+    <label>מיקום</label>${input('location', e.location)}
+    <label>הערה כללית</label>${input('notes', e.notes)}` : `<p class="small muted">${PARALLEL_NOTE}</p>`}
+    ${canStaffFill ? `<h3 class="small muted" style="margin:14px 0 0">פרטים מהלקוח (אפשר להשלים ולתקן בשמו)</h3>
+      ${cf.fields.filter(x => x.id !== 'title').map(staffFieldHtml).join('')}` : ''}
+    <div class="btn-row"><button class="btn" type="submit">שמור</button><button class="btn ghost" type="button" id="ev-edit-cancel">ביטול</button></div>
+  </form>`;
+}
+
+function bindDetails(el, d) {
+  const e = d.event, cf = d.clientForm;
+  $('#ev-copy', el).addEventListener('click', async () => toast(await copyText(eventCopyText(e, cf)) ? 'הפרטים הועתקו 📋' : 'לא הצלחתי להעתיק', 'ok'));
+  if ($('#ev-copy-link', el)) $('#ev-copy-link', el).addEventListener('click', async () =>
+    toast(await copyText(clientFormLink(cf.token)) ? 'הקישור ללקוח הועתק 🔗' : 'לא הצלחתי להעתיק', 'ok'));
+  const form = $('#ev-form', el), open = $('#ev-edit-open', el);
+  if (!form || !open) return;
+  open.addEventListener('click', () => { form.hidden = false; open.hidden = true; const x = form.querySelector('input:not([disabled]), select:not([disabled]), textarea'); if (x) x.focus(); });
+  $('#ev-edit-cancel', el).addEventListener('click', () => { form.hidden = true; open.hidden = false; });
+  form.addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const fields = {};
+    d.canEdit.forEach(k => {
+      if (!form.elements[k]) return;
+      const v = String(form.elements[k].value).trim();
+      if (v !== (e[k] == null ? '' : String(e[k]))) fields[k] = v;
+    });
+    let values = null;
+    if (cf && cf.fields && form.querySelector('.cf-field')) {
+      values = {};
+      let changed = false;
+      cf.fields.forEach(f => {
+        if (f.id === 'title') return;
+        const n = 'cf_' + f.id;
+        const v = f.type === 'checks' ? [...form.querySelectorAll(`[name="${n}"]:checked`)].map(x => x.value) : (form.elements[n] ? form.elements[n].value.trim() : f.value);
+        if ((Array.isArray(v) ? v.join(', ') : v) !== f.value) changed = true;
+        values[f.id] = v;
+      });
+      if (!changed) values = null;
+    }
+    if (!Object.keys(fields).length && !values) return toast('אין שינויים');
+    busy(true, 'שומר…');
+    try {
+      let row = e.row, key = e.key;
+      if (Object.keys(fields).length) { const nd = await api('event_update', { row, key, fields }); row = nd.event.row; key = nd.event.key; }
+      if (values) await api('client_staff_save', { row, key, values });
+      toast('נשמר ✅', 'ok');
+      S.cache.events = null;
+      const href = eventHref({ row, key });
+      if (location.hash !== href) location.hash = href; else route();
+    } catch (err) { toast(err.message, 'bad'); } finally { busy(false); }
+  });
+}
+
+// ----- צוות -----
+function crewCard(d, opts) {
+  const assign = !!d.users;
+  return `<section class="card" id="crew-card">
+    <div class="card-head"><h2>👥 צוות</h2>${d.crew.length ? `<span class="badge">${d.crew.length}</span>` : ''}</div>
+    <div id="crew-list"></div>
+    ${assign ? `
+    <div class="crew-add">
+      <select id="crew-user"><option value="">+ שבץ איש צוות…</option></select>
+      <input id="crew-role" list="role-sugg" placeholder="תפקיד"><datalist id="role-sugg">${(opts.roleSuggestions || []).map(x => `<option value="${esc(x)}">`).join('')}</datalist>
+    </div>
+    <p id="crew-warn" class="small warn-text" hidden></p>
+    <input id="crew-note" placeholder="הערה לאיש הצוות (לא חובה)" style="margin-top:6px">
+    <div id="crew-new" hidden>
+      <div class="grid2"><div><label>שם</label><input id="cn-name" placeholder="שם מלא"></div><div><label>טלפון</label><input id="cn-phone" type="tel" dir="ltr"></div></div>
+      <div class="btn-row" style="margin-top:8px"><button class="btn sm" type="button" id="cn-save">צור והוסף</button><button class="btn sm ghost" type="button" id="cn-cancel">ביטול</button></div>
+    </div>
+    <p id="crew-newpin" class="small" hidden></p>
+    <div class="btn-row" style="margin-top:8px">
+      <button class="btn" id="crew-save">שמור שיבוץ</button>
+      <button class="btn ghost sm" type="button" id="crew-new-open">➕ איש צוות חדש</button>
+    </div>
+    <div id="crew-share" hidden>
+      <div class="chips-row"><button class="chip-btn" id="crew-copy">📋 הודעה לקבוצה</button>${navigator.share ? '<button class="chip-btn" id="crew-native">↗️ שתף</button>' : ''}</div>
+    </div>` : ''}
+  </section>`;
+}
+
+function bindCrew(el, d) {
+  const e = d.event;
+  const assign = !!d.users;
+  let crew = d.crew.map(c => Object.assign({}, c));
   const userOf = id => (d.users || []).find(u => u.id === id) || {};
   const availability = u => u.blocked ? `לא זמין: ${u.blocked}` : u.busy ? `משובץ ב: ${u.busy}` : '';
-
-  const field = (label, html) => `<div><label>${label}</label>${html}</div>`;
-  const input = (name, val, type = 'text') => `<input name="${name}" type="${type}" value="${esc(val || '')}" ${editable(name) ? '' : 'disabled'}>`;
-  const select = (name, list, val, ph) => `<select name="${name}" ${editable(name) ? '' : 'disabled'}>${optionsHtml(list, val, ph)}</select>`;
-
-  el.innerHTML = `
-    ${myConfirmSection(d)}
-    <section class="card">
-      <div class="card-head"><h2>${esc(e.displayName || e.name)}</h2>${statusBadge(e.status)}</div>
-      <p class="muted small" style="margin:0">${esc(fmtDate(e.date) || 'אין תאריך')} ${e.startTime ? '· ' + esc(e.startTime) : ''} ${e.location ? '· 📍 ' + esc(e.location) : ''}</p>
-      ${eventActionsRow(e)}
-    </section>
-    ${clientFormSection(d, e)}
-
-    <section class="card">
-      <h2>👥 צוות משובץ</h2>
-      <div id="crew-list"></div>
-      ${d.users ? `
-      <div class="grid2">
-        <div><label>הוסף איש צוות</label><select id="crew-user"><option value="">— בחר —</option>${d.users.map(u => `<option value="${esc(u.id)}">${esc(u.name)}${availability(u) ? ' ⚠️ ' + esc(availability(u)) : ''}</option>`).join('')}</select></div>
-        <div><label>תפקיד באירוע</label><input id="crew-role" list="role-sugg" placeholder="זמר, נגן, הגברה, צלם…"><datalist id="role-sugg">${opts.roleSuggestions.map(x => `<option value="${esc(x)}">`).join('')}</datalist></div>
-      </div>
-      <p id="crew-warn" class="small warn-text" hidden></p>
-      <label>הערה לאיש הצוות</label><input id="crew-note" placeholder="אופציונלי — תוצג לו ותישלח בוואטסאפ">
-      <div class="btn-row">
-        <button class="btn secondary" id="crew-add">+ הוסף</button>
-        <button class="btn" id="crew-save">שמור שיבוץ</button>
-      </div>
-      <div id="crew-share" hidden>
-        <p class="small muted" style="margin:12px 0 4px">📲 לשלוח לכל אחד בנפרד — הכפתורים ליד השמות. או הודעה אחת לקבוצת הצוות:</p>
-        <div class="btn-row" style="margin-top:4px">
-          <button class="btn ghost sm" id="crew-copy">📋 העתק הודעה לקבוצה</button>
-          ${navigator.share ? '<button class="btn ghost sm" id="crew-native">↗️ שתף</button>' : ''}
-        </div>
-      </div>` : ''}
-    </section>
-
-    <section class="card">
-      <h2>✏️ פרטי האירוע</h2>
-      ${writeOn('MAIN') ? '' : `<p class="small muted" style="margin:0 0 8px">${PARALLEL_NOTE}</p>`}
-      <form id="ev-form">
-        <label>שם אירוע</label>${input('name', e.name)}
-        <div class="grid2">
-          ${field('סטטוס', select('status', opts.statusOptions, e.status, '— ממתין להצעה —'))}
-          ${field('טלפון', input('phone', e.phone, 'tel'))}
-          ${field('תאריך', input('date', e.date, 'date'))}
-          ${field('שעת עלייה', input('startTime', e.startTime))}
-          ${field('מוצר', select('eventType', opts.eventTypeOptions, e.eventType))}
-          ${field('הגברה', select('amplification', opts.amplificationOptions, e.amplification))}
-        </div>
-        <label>מיקום</label>${input('location', e.location)}
-        <label>הערה כללית</label>${input('notes', e.notes)}
-        ${'officeStatus' in e ? `<label>סטטוס גבייה</label>${input('officeStatus', e.officeStatus)}${editable('officeStatus') ? '<p class="small muted" style="margin:4px 0 0">כשהתשלום התקבל — לכתוב <b>הושלם</b></p>' : ''}` : ''}
-        ${e.price ? `<p class="muted small">מחיר אחרון בהצעה: <b>${esc(e.price)}</b></p>` : ''}
-        ${d.canEdit.length ? '<button class="btn block" style="margin-top:16px" type="submit">שמור שינויים</button>' : ''}
-      </form>
-    </section>
-
-    ${requestsSection(d, e)}
-    ${billingSection(d)}
-    ${sameDaySection(d, e)}
-    ${quotesSection(d)}
-
-    ${'followUp' in e ? `<section class="card">
-      <h2>📝 פולואפ מכירות</h2>
-      <div id="fu-box">${e.followUp ? `<div class="note-box">${esc(e.followUp)}</div>` : '<p class="empty">אין הערות עדיין</p>'}</div>
-      ${can('sales') && writeOn('MAIN') ? `<label>הערה חדשה</label><textarea id="fu-text" rows="2"></textarea>
-      <button class="btn secondary block" id="fu-add" style="margin-top:10px">הוסף לפולואפ</button>` : ''}
-    </section>` : ''}
-
-    ${notesSection(d.notes)}
-    ${historySection(d)}`;
-
-  // ----- צוות -----
-  const drawCrew = (justSaved) => {
+  const fillUsers = () => {
+    if (!assign) return;
+    $('#crew-user', el).innerHTML = '<option value="">+ שבץ איש צוות…</option>' + d.users.filter(u => !crew.some(c => c.userId === u.id))
+      .map(u => `<option value="${esc(u.id)}">${esc(u.name)}${availability(u) ? ' ⚠️ ' + esc(availability(u)) : ''}</option>`).join('');
+  };
+  const draw = justSaved => {
     $('#crew-list', el).innerHTML = crew.length ? crew.map((c, i) => {
       const phone = userOf(c.userId).phone;
       return `<div class="crew-row"><div class="grow"><b>${esc(c.name)}</b>
-        <div class="sub small muted">${esc(c.role || '')}${c.note ? ' · ' + esc(c.note) : ''}${c.confirm === 'לא זמין' && c.confirmNote ? ' · <b>' + esc(c.confirmNote) + '</b>' : ''}</div></div>
-        ${c.confirm ? confirmBadge(c) : '<span class="badge">חדש</span>'}
-        ${d.users && justSaved && phone ? `<a class="btn sm wa" target="_blank" href="${waLink(phone, crewMessage(e, c, d.clientForm))}">📲</a>` : ''}
-        ${d.users ? `<button class="btn sm danger" data-rm="${i}" aria-label="הסר">✕</button>` : ''}</div>`;
-    }).join('') : '<p class="empty">עוד לא שובץ אף אחד</p>';
-    $$('[data-rm]', el).forEach(b => b.addEventListener('click', () => { crew.splice(+b.dataset.rm, 1); drawCrew(false); }));
+        <span class="small muted">${esc(c.role || '')}${c.note ? ' · ' + esc(c.note) : ''}${c.confirm === 'לא זמין' && c.confirmNote ? ' · <b>' + esc(c.confirmNote) + '</b>' : ''}</span></div>
+        ${c.confirm ? confirmBadge(c) : '<span class="badge">לא נשמר</span>'}
+        ${assign && justSaved && phone ? `<a class="btn sm wa" target="_blank" href="${waLink(phone, crewMessage(e, c, d.clientForm))}">📲</a>` : ''}
+        ${assign ? `<button class="btn sm danger" data-rm="${i}" aria-label="הסר">✕</button>` : ''}</div>`;
+    }).join('') : '<p class="empty">עוד לא שובץ צוות</p>';
+    $$('[data-rm]', el).forEach(b => b.addEventListener('click', () => { crew.splice(+b.dataset.rm, 1); draw(false); }));
     if ($('#crew-share', el)) $('#crew-share', el).hidden = !(justSaved && crew.length);
+    fillUsers();
   };
-  drawCrew(true);
-  if (d.users) {
-    $('#crew-user', el).addEventListener('change', ev => {
-      const warn = availability(userOf(ev.target.value));
-      $('#crew-warn', el).hidden = !warn;
-      $('#crew-warn', el).textContent = warn ? '⚠️ ' + warn : '';
-    });
-    $('#crew-add', el).addEventListener('click', () => {
-      const id = $('#crew-user', el).value;
-      if (!id) return toast('בחר איש צוות', 'bad');
-      if (crew.some(c => c.userId === id)) return toast('כבר משובץ', 'bad');
-      const u = userOf(id);
-      crew.push({ userId: id, name: u.name, role: $('#crew-role', el).value.trim(), note: $('#crew-note', el).value.trim() });
-      $('#crew-user', el).value = ''; $('#crew-role', el).value = ''; $('#crew-note', el).value = '';
-      $('#crew-warn', el).hidden = true;
-      drawCrew(false);
-    });
-    $('#crew-save', el).addEventListener('click', async () => {
-      busy(true, 'שומר שיבוץ…');
-      try {
-        crew = await api('assign_set', { row: e.row, key: e.key, crew });
-        drawCrew(true);
-        toast('השיבוץ נשמר — אפשר לשלוח בוואטסאפ 📲', 'ok');
-      } catch (err) { toast(err.message, 'bad'); } finally { busy(false); }
-    });
-    $('#crew-copy', el).addEventListener('click', async () => {
-      toast(await copyText(crewGroupMessage(e, crew, d.clientForm)) ? 'ההודעה הועתקה — הדבק בקבוצת הוואטסאפ 📋' : 'לא הצלחתי להעתיק', 'ok');
-    });
-    if ($('#crew-native', el)) $('#crew-native', el).addEventListener('click', () => {
-      navigator.share({ text: crewGroupMessage(e, crew, d.clientForm) }).catch(() => {});
-    });
-  }
-
-  // ----- עריכת פרטים -----
-  $('#ev-form', el).addEventListener('submit', async ev => {
-    ev.preventDefault();
-    const fields = {};
-    for (const [k, v] of new FormData(ev.target).entries()) {
-      if (!editable(k)) continue;
-      const orig = e[k] == null ? '' : String(e[k]);
-      if (String(v).trim() !== orig) fields[k] = String(v).trim();
-    }
-    if (!Object.keys(fields).length) return toast('אין שינויים');
-    busy(true, 'שומר…');
+  draw(true);
+  if (!assign) return;
+  // בחירה מהרשימה מוסיפה מיד (לא צריך "הוסף" נפרד)
+  const addPicked = () => {
+    const id = $('#crew-user', el).value;
+    if (!id) return false;
+    const u = userOf(id);
+    crew.push({ userId: id, name: u.name, role: $('#crew-role', el).value.trim(), note: $('#crew-note', el).value.trim() });
+    $('#crew-role', el).value = ''; $('#crew-note', el).value = ''; $('#crew-warn', el).hidden = true;
+    draw(false);
+    return true;
+  };
+  $('#crew-user', el).addEventListener('change', ev => {
+    const warn = availability(userOf(ev.target.value));
+    $('#crew-warn', el).hidden = !warn;
+    $('#crew-warn', el).textContent = warn ? '⚠️ ' + warn : '';
+    if (!warn) addPicked();   // עם אזהרה — מוסיפים רק בשמירה, אחרי שראו אותה
+  });
+  $('#crew-save', el).addEventListener('click', async () => {
+    addPicked();
+    busy(true, 'שומר שיבוץ…');
     try {
-      const nd = await api('event_update', { row: e.row, key: e.key, fields });
-      toast('נשמר ✅', 'ok');
-      S.cache.events = null;
-      history.replaceState(null, '', eventHref(nd.event));
-      renderEditableEvent(el, nd, opts);
+      crew = await api('assign_set', { row: e.row, key: e.key, crew });
+      draw(true);
+      toast(crew.length ? `השיבוץ נשמר (${crew.length}) — אפשר לשלוח בוואטסאפ 📲` : 'השיבוץ נשמר — אין צוות באירוע', 'ok');
     } catch (err) { toast(err.message, 'bad'); } finally { busy(false); }
   });
+  // איש צוות חדש
+  const nb = $('#crew-new', el);
+  $('#crew-new-open', el).addEventListener('click', () => { nb.hidden = false; $('#cn-name', el).focus(); });
+  $('#cn-cancel', el).addEventListener('click', () => { nb.hidden = true; });
+  $('#cn-save', el).addEventListener('click', async () => {
+    const name = $('#cn-name', el).value.trim();
+    if (!name) return toast('חסר שם', 'bad');
+    busy(true, 'יוצר…');
+    try {
+      const r = await api('crew_quick_add', { name, phone: $('#cn-phone', el).value.trim() });
+      d.users.push(r.user);
+      crew.push({ userId: r.user.id, name: r.user.name, role: $('#crew-role', el).value.trim(), note: $('#crew-note', el).value.trim() });
+      $('#cn-name', el).value = ''; $('#cn-phone', el).value = ''; nb.hidden = true;
+      $('#crew-newpin', el).hidden = false;
+      $('#crew-newpin', el).innerHTML = `✅ ${esc(r.user.name)} נוסף לרשימת הצוות. קוד הכניסה שלו: <b dir="ltr">${esc(r.pin)}</b> (מוצג פעם אחת — שלח לו). עכשיו "שמור שיבוץ".`;
+      draw(false);
+    } catch (err) { toast(err.message, 'bad'); } finally { busy(false); }
+  });
+  $('#crew-copy', el).addEventListener('click', async () => toast(await copyText(crewGroupMessage(e, crew, d.clientForm)) ? 'ההודעה הועתקה — הדבק בקבוצה 📋' : 'לא הצלחתי להעתיק', 'ok'));
+  if ($('#crew-native', el)) $('#crew-native', el).addEventListener('click', () => navigator.share({ text: crewGroupMessage(e, crew, d.clientForm) }).catch(() => {}));
+}
 
-  // ----- פולואפ מכירות -----
-  if ($('#fu-add', el)) $('#fu-add', el).addEventListener('click', async () => {
+// ----- קטעים מקופלים -----
+function fold(title, body, open, extra) {
+  return `<details class="card fold"${open ? ' open' : ''}><summary><h2>${title}</h2>${extra || ''}</summary>${body}</details>`;
+}
+
+function followUpFold(e) {
+  if (!('followUp' in e)) return '';
+  return fold(`📝 פולואפ מכירות`, `
+    <div id="fu-box">${e.followUp ? `<div class="note-box">${esc(e.followUp)}</div>` : '<p class="empty">אין הערות עדיין</p>'}</div>
+    ${can('sales') && writeOn('MAIN') ? `<textarea id="fu-text" rows="2" placeholder="הערה חדשה"></textarea>
+    <button class="btn secondary block" id="fu-add" style="margin-top:8px">הוסף לפולואפ</button>` : ''}`, false, e.followUp ? '<span class="badge">יש</span>' : '');
+}
+
+function bindFollowUp(el, e) {
+  if (!$('#fu-add', el)) return;
+  $('#fu-add', el).addEventListener('click', async () => {
     const comment = $('#fu-text', el).value.trim();
     if (!comment) return;
     busy(true, 'מוסיף…');
@@ -897,15 +911,76 @@ function renderEditableEvent(el, d, opts) {
       e.followUp = res.followUp;
       $('#fu-box', el).innerHTML = `<div class="note-box">${esc(res.followUp)}</div>`;
       $('#fu-text', el).value = '';
-      const box = $('#fu-box .note-box', el); box.scrollTop = box.scrollHeight;
       toast('נוסף לפולואפ ✅', 'ok');
     } catch (err) { toast(err.message, 'bad'); } finally { busy(false); }
   });
+}
 
+function quotesFold(d) {
+  if (!d.quotes) return '';
+  const e = d.event;
+  const open = q => `#/quote?row=${e.row}&k=${encodeURIComponent(e.key)}&doc=${encodeURIComponent(q.docId)}`;
+  const drafts = d.quotes.filter(q => q.draft).length;
+  return fold('📄 הצעות מחיר', d.quotes.length ? d.quotes.map(q => `
+    <div class="crew-row"><div class="grow">${q.draft ? `<b>${esc(q.created)}</b>` : `<a href="${esc(q.pdfUrl)}" target="_blank">${esc(q.created)}</a>`}
+      <span class="small muted">${esc(q.by)}${q.docUrl ? ` · <a href="${esc(q.docUrl)}" target="_blank">מסמך</a>` : ''}</span></div>
+      ${q.draft ? `<span class="badge warn">טיוטה</span>${can('quotes') ? ` <a class="btn sm secondary" href="${open(q)}">📄 ייצא</a>` : ''}` : ''}
+      ${q.sentWhatsapp ? '<span class="badge ok">וואטסאפ</span>' : ''}${q.sentEmail ? ' <span class="badge ok">מייל</span>' : ''}
+    </div>`).join('') : '<p class="empty">עוד לא הופקה הצעה</p>', drafts > 0, `<span class="badge${drafts ? ' warn' : ''}">${drafts ? drafts + ' טיוטה' : d.quotes.length}</span>`);
+}
+
+function sameDayFold(d, e) {
+  if (!d.sameDay || !d.sameDay.length) return '';
+  return fold('🗓️ עוד באותו יום', d.sameDay.map((o, i) => `<div class="crew-row">
+      <div class="grow"><a href="${eventHref(o)}">${esc(o.name)}</a> <span class="small muted">${esc([o.startTime, o.location].filter(Boolean).join(' · '))}</span>
+      ${o.location && e.location ? `<button class="link-btn" data-travel="${i}">🚗 זמן נסיעה</button>` : ''}</div>
+      ${statusBadge(o.status)}</div>`).join(''), false, `<span class="badge warn">${d.sameDay.length}</span>`);
+}
+
+function requestsFold(d, e) {
+  const list = d.requests || [];
+  if (!list.length && !can('requests')) return '';
+  const pending = list.filter(q => q.status === 'ממתין').length;
+  return fold('📨 שאלות ובקשות', `${can('requests') ? `<a class="btn sm secondary" href="#/request-new?row=${e.row}&k=${encodeURIComponent(e.key)}">+ חדשה</a>` : ''}
+    ${list.length ? `<div class="list">${list.map(reqItem).join('')}</div>` : '<p class="empty">אין בקשות על האירוע הזה</p>'}`, pending > 0, list.length ? `<span class="badge${pending ? ' warn' : ''}">${list.length}</span>` : '');
+}
+
+function notesFold(list) {
+  if (!can('notes_write') && !list.length) return '';
+  const open = list.filter(n => n.status === 'פתוח').length;
+  return fold('💬 הערות לאירוע', `<p class="small muted" style="margin-top:0">${canView('notes_manage') ? 'כל ההערות מהצוות' : 'ההערות שלך — מגיעות למנהל'}</p>
+    <div id="fb-list">${notesHtml(list)}</div>
+    ${can('notes_write') ? `<textarea id="fb-text" rows="2" placeholder="משהו חסר, תקלה, הערה לפעם הבאה…"></textarea>
+    <button class="btn secondary block" id="fb-add" style="margin-top:8px">שלח הערה</button>` : ''}`, open > 0, list.length ? `<span class="badge${open ? ' warn' : ''}">${list.length}</span>` : '');
+}
+
+function historyFold(d) {
+  if (!d.history) return '';
+  return fold('🕘 יומן שינויים', d.history.length ? d.history.map(h => `
+    <div class="hist"><div class="small muted">${esc(h.ts)} · ${esc(h.by)}</div>
+    <div><b>${esc(h.action)}</b>${h.details ? ' — ' + esc(h.details) : ''}</div></div>`).join('') : '<p class="empty">אין שינויים עדיין</p>', false, `<span class="badge">${d.history.length}</span>`);
+}
+
+function renderEvent(el, d, opts) {
+  const e = d.event;
+  setTitle(e.displayName || e.name);
+  el.innerHTML = `
+    ${myConfirmSection(d)}
+    ${detailsCard(d, opts)}
+    ${crewCard(d, opts)}
+    ${billingSection(d)}
+    ${followUpFold(e)}
+    ${quotesFold(d)}
+    ${requestsFold(d, e)}
+    ${sameDayFold(d, e)}
+    ${notesFold(d.notes)}
+    ${historyFold(d)}`;
   bindMyConfirm(el, e);
-  bindTravel(el, d, e);
-  bindClientForm(el, d);
+  bindDetails(el, d);
+  bindCrew(el, d);
   bindBilling(el, d);
+  bindFollowUp(el, e);
+  bindTravel(el, d, e);
   bindNotes(el, e);
 }
 
