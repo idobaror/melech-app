@@ -30,26 +30,53 @@ function optionsHtml(list, current, placeholder = '— בחר —') {
 const eventOptions = () => cached('opts', () => api('event_options'));
 
 // ---------- שיבוץ: הודעות וואטסאפ ----------
-function crewMessage(e, c) {
+// כל הפרטים התפעוליים של האירוע (בלי מחיר וגבייה) + מה שהלקוח מילא
+function eventDetailLines(e, cf) {
+  const v = id => { const f = cf && cf.fields ? cf.fields.find(x => x.id === id) : null; return f ? f.value : ''; };
+  const address = v('address');
+  const lines = [
+    `📅 ${fmtDate(e.date)}${e.startTime ? ' · עלייה ' + e.startTime : ''}`,
+    e.location ? `📍 ${e.location}` : null,
+    address && address !== e.location ? `🏠 כתובת מדויקת: ${address}` : null,
+    e.location || address ? `🚗 ניווט: ${wazeLink(address || e.location)}` : null,
+    e.eventType ? `🎭 מוצר: ${e.eventType}` : null,
+    v('celebrating') ? `🎉 מה חוגגים: ${v('celebrating')}` : null,
+    v('startTime') && v('startTime') !== e.startTime ? `🕘 תחילת האירוע (כניסת קהל): ${v('startTime')}` : null,
+    e.amplification ? `🔊 הגברה: ${e.amplification}` : null,
+    v('venueHas') ? `🏛️ יש במקום: ${v('venueHas')}` : null,
+    e.additionalShows || v('shows') ? `🎶 מופעים נוספים: ${e.additionalShows || v('shows')}` : null,
+    e.notes ? `📝 ${e.notes}` : null
+  ];
+  const contacts = [
+    e.phone ? `• לקוח: ${e.phone}` : null,
+    v('producerPhone') ? `• מנהל/מפיק האירוע: ${v('producerPhone')}` : null,
+    v('techPhone') ? `• איש טכני באולם: ${v('techPhone')}` : null,
+    v('ampPhone') ? `• ספק הגברה: ${v('ampPhone')}` : null,
+    v('dj') ? `• דיג'יי: ${v('dj')}` : null
+  ].filter(Boolean);
+  if (contacts.length) lines.push('', '*אנשי קשר:*', ...contacts);
+  return lines.filter(x => x !== null);
+}
+
+function crewMessage(e, c, cf) {
   const first = (c.name || '').split(' ')[0];
   return [
     `היי ${first} 👋`,
     `שובצת לאירוע *${e.displayName || e.name}*`,
-    `📅 ${fmtDate(e.date)}${e.startTime ? ' · ' + e.startTime : ''}`,
-    e.location ? `📍 ${e.location}` : null,
     c.role ? `🎤 תפקיד: ${c.role}` : null,
-    c.note ? `📝 ${c.note}` : null,
+    c.note ? `💬 ${c.note}` : null,
+    '',
+    ...eventDetailLines(e, cf),
     '',
     `לאישור הגעה ולכל הפרטים: ${APP_URL}${eventHref(e)}`
   ].filter(x => x !== null).join('\n');
 }
 
 // הודעה אחת לקבוצת הוואטסאפ של הצוות
-function crewGroupMessage(e, crew) {
+function crewGroupMessage(e, crew, cf) {
   return [
     `🎤 *${e.displayName || e.name}*`,
-    `📅 ${fmtDate(e.date)}${e.startTime ? ' · ' + e.startTime : ''}`,
-    e.location ? `📍 ${e.location}` : null,
+    ...eventDetailLines(e, cf),
     '',
     '*הצוות:*',
     ...crew.map(c => `• ${c.name}${c.role ? ' — ' + c.role : ''}`),
@@ -707,7 +734,7 @@ function renderEditableEvent(el, d, opts) {
       return `<div class="crew-row"><div class="grow"><b>${esc(c.name)}</b>
         <div class="sub small muted">${esc(c.role || '')}${c.note ? ' · ' + esc(c.note) : ''}${c.confirm === 'לא זמין' && c.confirmNote ? ' · <b>' + esc(c.confirmNote) + '</b>' : ''}</div></div>
         ${c.confirm ? confirmBadge(c) : '<span class="badge">חדש</span>'}
-        ${d.users && justSaved && phone ? `<a class="btn sm wa" target="_blank" href="${waLink(phone, crewMessage(e, c))}">📲</a>` : ''}
+        ${d.users && justSaved && phone ? `<a class="btn sm wa" target="_blank" href="${waLink(phone, crewMessage(e, c, d.clientForm))}">📲</a>` : ''}
         ${d.users ? `<button class="btn sm danger" data-rm="${i}" aria-label="הסר">✕</button>` : ''}</div>`;
     }).join('') : '<p class="empty">עוד לא שובץ אף אחד</p>';
     $$('[data-rm]', el).forEach(b => b.addEventListener('click', () => { crew.splice(+b.dataset.rm, 1); drawCrew(false); }));
@@ -739,10 +766,10 @@ function renderEditableEvent(el, d, opts) {
       } catch (err) { toast(err.message, 'bad'); } finally { busy(false); }
     });
     $('#crew-copy', el).addEventListener('click', async () => {
-      toast(await copyText(crewGroupMessage(e, crew)) ? 'ההודעה הועתקה — הדבק בקבוצת הוואטסאפ 📋' : 'לא הצלחתי להעתיק', 'ok');
+      toast(await copyText(crewGroupMessage(e, crew, d.clientForm)) ? 'ההודעה הועתקה — הדבק בקבוצת הוואטסאפ 📋' : 'לא הצלחתי להעתיק', 'ok');
     });
     if ($('#crew-native', el)) $('#crew-native', el).addEventListener('click', () => {
-      navigator.share({ text: crewGroupMessage(e, crew) }).catch(() => {});
+      navigator.share({ text: crewGroupMessage(e, crew, d.clientForm) }).catch(() => {});
     });
   }
 
