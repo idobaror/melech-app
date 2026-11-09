@@ -38,12 +38,12 @@ PAGES.quote = {
       const v = `${preRow}|${preKey}`;
       if (!$$('option', sel).some(o => o.value === v)) sel.insertAdjacentHTML('beforeend', `<option value="${esc(v)}">האירוע שנבחר</option>`);
       sel.value = v;
-      loadQuoteEvent(el, v, allOpts, alive);
+      loadQuoteEvent(el, v, allOpts, alive, r.q.get('doc'));
     }
   }
 };
 
-async function loadQuoteEvent(el, value, opts, alive) {
+async function loadQuoteEvent(el, value, opts, alive, openDoc) {
   const box = $('#q-form', el);
   if (!value) { box.innerHTML = ''; return; }
   const i = value.indexOf('|');
@@ -90,9 +90,10 @@ async function loadQuoteEvent(el, value, opts, alive) {
           <div><label>חדרים משודרגים</label><input type="number" name="upgradedRooms" value="4" min="0"></div>
         </div>
 
+        <button class="btn block" type="submit" style="margin-top:16px">✏️ צור מסמך הצעה לעריכה</button>
         <div class="btn-row">
+          <button class="btn secondary" type="button" id="q-now">⚡ הפק PDF מיד, בלי עריכה</button>
           <button class="btn ghost" type="button" id="q-update">🔄 עדכן גיליון בלבד</button>
-          <button class="btn" type="submit">📄 הפק הצעה</button>
         </div>
       </form>
     </section>
@@ -118,22 +119,51 @@ async function loadQuoteEvent(el, value, opts, alive) {
     return data;
   };
 
-  const send = async mode => {
+  const send = async (mode, exportNow) => {
     const data = collect();
     if (mode === 'save' && !data.price) return toast('חסר מחיר', 'bad');
-    busy(true, mode === 'save' ? 'מפיק הצעה ומצרף מפרטים… (עד דקה)' : 'מעדכן…');
+    busy(true, mode !== 'save' ? 'מעדכן…' : exportNow ? 'מפיק הצעה ומצרף מפרטים… (עד דקה)' : 'יוצר מסמך…');
     try {
-      const res = await api('quote_create', { row: e.row, key: e.key, mode, data });
+      const res = await api('quote_create', { row: e.row, key: e.key, mode, data, exportNow: !!exportNow });
       S.cache.events = null;
       if (res.key) { e.key = res.key; e.row = res.row; }
       e.phone = data.phone || e.phone;
       e.name = data.name || e.name;
       if (res.pdfUrl) showQuoteResult($('#q-result', box), e, res, lastEmail);
+      else if (res.draft) showQuoteDraft($('#q-result', box), e, res, lastEmail);
       else toast(res.message || 'עודכן ✅', 'ok');
     } catch (err) { toast(err.message, 'bad'); } finally { busy(false); }
   };
   form.addEventListener('submit', ev => { ev.preventDefault(); send('save'); });
+  $('#q-now', box).addEventListener('click', () => send('save', true));
   $('#q-update', box).addEventListener('click', () => send('update'));
+  // הגעה מטיוטה בכרטיס האירוע
+  const doc = openDoc && (d.quotes || []).find(q => q.docId === openDoc);
+  if (doc) (doc.draft ? showQuoteDraft : showQuoteResult)($('#q-result', box), e, doc, lastEmail);
+}
+
+// טיוטה: המסמך נוצר — עורכים ב-Docs, ואז מייצאים PDF (כולל המפרטים המקושרים במסמך)
+function showQuoteDraft(box, e, res, lastEmail) {
+  box.innerHTML = `
+    <section class="card" style="border-color:var(--warn)">
+      <h2>✏️ טיוטת הצעה</h2>
+      <p class="small" style="margin-top:0">1. פותחים את המסמך ועורכים כמה שצריך (השינויים נשמרים לבד).<br>2. חוזרים לכאן ולוחצים "ייצא PDF". המפרטים שמקושרים במסמך יצורפו לסוף ה-PDF.</p>
+      <div class="btn-row">
+        <a class="btn" href="${esc(res.docUrl)}" target="_blank">✏️ פתח לעריכה</a>
+        <button class="btn secondary" id="q-export">📄 ייצא PDF</button>
+      </div>
+    </section>`;
+  box.scrollIntoView({ behavior: 'smooth' });
+  $('#q-export', box).addEventListener('click', () => exportQuote(box, e, res.docId, lastEmail));
+}
+
+async function exportQuote(box, e, docId, lastEmail) {
+  busy(true, 'מייצא PDF ומצרף מפרטים… (עד דקה)');
+  try {
+    const res = await api('quote_export', { row: e.row, key: e.key, docId });
+    showQuoteResult(box, e, res, lastEmail);
+    toast('ה-PDF מוכן ✅', 'ok');
+  } catch (err) { toast(err.message, 'bad'); } finally { busy(false); }
 }
 
 function showQuoteResult(box, e, res, lastEmail) {
@@ -141,11 +171,12 @@ function showQuoteResult(box, e, res, lastEmail) {
   box.innerHTML = `
     <section class="card" style="border-color:var(--ok)">
       <h2>✅ ההצעה מוכנה</h2>
-      ${res.attached.length ? `<p class="small" style="margin-top:0">📎 צורפו ל-PDF: ${res.attached.map(esc).join(', ')}</p>` : '<p class="small muted" style="margin-top:0">לא נמצאו קבצי PDF מקושרים לצירוף</p>'}
+      ${(res.attached = typeof res.attached === 'string' ? res.attached.split(', ').filter(Boolean) : res.attached || []).length ? `<p class="small" style="margin-top:0">📎 צורפו ל-PDF: ${res.attached.map(esc).join(', ')}</p>` : '<p class="small muted" style="margin-top:0">לא נמצאו קבצי PDF מקושרים לצירוף</p>'}
       ${res.mergeError ? `<p class="small" style="color:var(--warn)">⚠️ ${esc(res.mergeError)}</p>` : ''}
       <div class="btn-row">
         <a class="btn ghost" href="${esc(res.pdfUrl)}" target="_blank">👁️ צפה ב-PDF</a>
         <a class="btn ghost" href="${esc(res.docUrl)}" target="_blank">✏️ ערוך מסמך</a>
+        ${res.docId ? '<button class="btn ghost" id="q-reexport">🔁 ייצא שוב (אחרי תיקון)</button>' : ''}
       </div>
       <h3 style="margin-top:18px">שליחה ללקוח</h3>
       <div class="btn-row" style="margin-top:6px">
@@ -164,6 +195,7 @@ function showQuoteResult(box, e, res, lastEmail) {
   if ($('#q-wa', box)) $('#q-wa', box).addEventListener('click', () => {
     api('quote_mark_sent', { pdfId: res.pdfId, channel: 'whatsapp' }).catch(() => {});
   });
+  if ($('#q-reexport', box)) $('#q-reexport', box).addEventListener('click', () => exportQuote(box, e, res.docId, lastEmail));
   $('#q-mail-open', box).addEventListener('click', () => { $('#q-mail', box).hidden = false; $('#q-mail [name=to]', box).focus(); });
   $('#q-mail', box).addEventListener('submit', async ev => {
     ev.preventDefault();

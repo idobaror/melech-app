@@ -613,9 +613,12 @@ function bindTravel(el, d, e) {
 
 function quotesSection(d) {
   if (!d.quotes) return '';
-  return `<section class="card"><h2>📄 הצעות שהופקו</h2>${d.quotes.length ? d.quotes.map(q => `
-    <div class="crew-row"><div class="grow"><a href="${esc(q.pdfUrl)}" target="_blank">${esc(q.created)}</a>
-      <div class="small muted">${esc(q.by)}${q.attached ? ' · צורפו: ' + esc(q.attached) : ''}</div></div>
+  const e = d.event;
+  const open = q => `#/quote?row=${e.row}&k=${encodeURIComponent(e.key)}&doc=${encodeURIComponent(q.docId)}`;
+  return `<section class="card"><h2>📄 הצעות מחיר</h2>${d.quotes.length ? d.quotes.map(q => `
+    <div class="crew-row"><div class="grow">${q.draft ? `<b>${esc(q.created)}</b>` : `<a href="${esc(q.pdfUrl)}" target="_blank">${esc(q.created)}</a>`}
+      <div class="small muted">${esc(q.by)}${q.attached ? ' · צורפו: ' + esc(q.attached) : ''}${q.docUrl ? ` · <a href="${esc(q.docUrl)}" target="_blank">מסמך</a>` : ''}</div></div>
+      ${q.draft ? `<span class="badge warn">טיוטה</span>${can('quotes') ? ` <a class="btn sm secondary" href="${open(q)}">📄 ייצא</a>` : ''}` : ''}
       ${q.sentWhatsapp ? '<span class="badge ok">וואטסאפ</span>' : ''}${q.sentEmail ? ' <span class="badge ok">מייל</span>' : ''}
     </div>`).join('') : '<p class="empty">עוד לא הופקה הצעה</p>'}</section>`;
 }
