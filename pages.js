@@ -483,7 +483,7 @@ function clientFormSection(d, e) {
   const msg = `היי! כדי שנגיע מוכנים ל${e.displayName || e.name}${e.date ? ' ב-' + e.date.split('-').reverse().join('/') : ''}, נשמח שתשלימו כמה פרטים כאן:
 ${link}
 תודה, צוות מלך הקסטות 👑`;
-  return `<section class="card"><div class="card-head"><h2>📋 פרטים מהלקוח</h2>
+  return `<section class="card" id="cf-card"><div class="card-head"><h2>📋 פרטים מהלקוח</h2>
       <span class="badge ${missing.length ? 'warn' : 'ok'}">${c.filled}/${c.total}</span></div>
     <div class="cf-progress" style="margin:0 0 8px"><span style="width:${Math.round(100 * c.filled / c.total)}%"></span></div>
     <div class="cf-list">${c.fields.filter(f => f.value).map(f => `<div class="cf-field locked"><div class="cf-label">${esc(f.label)}</div><div class="cf-value">${/^[\d\s+()-]{9,}$/.test(f.value) ? `<a dir="ltr" href="tel:${esc(f.value.replace(/[^\d+]/g, ''))}">${esc(f.value)}</a>` : esc(f.value)}</div></div>`).join('')}</div>
@@ -492,7 +492,27 @@ ${link}
       ${e.phone ? `<a class="btn wa sm" target="_blank" href="${waLink(e.phone, msg)}">📲 שלח ללקוח בוואטסאפ</a>` : ''}
       <button class="btn ghost sm" data-copy-client>📋 העתק קישור</button>
       <a class="btn ghost sm" target="_blank" href="${esc(link)}">👁️ איך הלקוח רואה</a>
-    </div>` : ''}</section>`;
+    </div>
+    <button class="btn secondary block" data-staff-fill style="margin-top:10px">✏️ מלא / תקן בשם הלקוח</button>
+    <form id="cf-staff" hidden>
+      <p class="small muted" style="margin:12px 0 0">למשל אחרי שיחה עם הלקוח. אפשר להשלים וגם לתקן — הכול נרשם ביומן השינויים.</p>
+      ${c.fields.map(staffFieldHtml).join('')}
+      <div class="btn-row">
+        <button class="btn" type="submit">שמור</button>
+        <button class="btn ghost" type="button" data-staff-cancel>ביטול</button>
+      </div>
+    </form>` : ''}</section>`;
+}
+
+function staffFieldHtml(f) {
+  const lbl = `<label class="cf-label">${esc(f.label)}${f.id === 'title' ? ' 🔒' : ''}</label>`;
+  if (f.id === 'title') return `<div class="cf-field">${lbl}<div class="cf-value">${esc(f.value)}</div><div class="small muted">לפי השם הזה תיקי ההפקה מוצאים את הפרטים — משנים אותו בגיליון</div></div>`;
+  if (f.type === 'checks') {
+    const on = f.value.split(',').map(s => s.trim());
+    return `<div class="cf-field">${lbl}<div class="cf-checks">${f.options.map(o => `<label class="perm-item"><input type="checkbox" name="${f.id}" value="${esc(o)}" ${on.indexOf(o) >= 0 ? 'checked' : ''}> ${esc(o)}</label>`).join('')}</div></div>`;
+  }
+  if (f.type === 'textarea') return `<div class="cf-field">${lbl}<textarea name="${f.id}" rows="2" maxlength="500">${esc(f.value)}</textarea></div>`;
+  return `<div class="cf-field">${lbl}<input name="${f.id}" maxlength="500" value="${esc(f.value)}"${f.type === 'tel' ? ' type="tel" inputmode="tel" dir="ltr"' : ''}></div>`;
 }
 
 function bindClientForm(el, d) {
@@ -500,6 +520,33 @@ function bindClientForm(el, d) {
   if (b) b.addEventListener('click', async () => {
     const link = clientFormLink(d.clientForm.token);
     try { await navigator.clipboard.writeText(link); toast('הקישור הועתק'); } catch (err) { prompt('העתק את הקישור:', link); }
+  });
+  const form = $('#cf-staff', el);
+  if (!form) return;
+  const openBtn = $('[data-staff-fill]', el);
+  openBtn.addEventListener('click', () => { form.hidden = false; openBtn.hidden = true; const first = form.querySelector('input:not([type=checkbox]), textarea'); if (first) first.focus(); });
+  $('[data-staff-cancel]', el).addEventListener('click', () => { form.hidden = true; openBtn.hidden = false; });
+  form.addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const values = {};
+    d.clientForm.fields.forEach(f => {
+      if (f.id === 'title') return;
+      values[f.id] = f.type === 'checks'
+        ? [...form.querySelectorAll(`[name="${f.id}"]:checked`)].map(x => x.value)
+        : form.elements[f.id].value.trim();
+    });
+    const btn = form.querySelector('button[type=submit]');
+    btn.disabled = true; btn.textContent = 'שומר…';
+    try {
+      d.clientForm = await api('client_staff_save', { row: d.event.row, key: d.event.key, values });
+      toast('נשמר ✓', 'ok');
+      const card = $('#cf-card', el);
+      card.outerHTML = clientFormSection(d, d.event);
+      bindClientForm(el, d);
+    } catch (e) {
+      toast(e.message, 'bad');
+      btn.disabled = false; btn.textContent = 'שמור';
+    }
   });
 }
 
