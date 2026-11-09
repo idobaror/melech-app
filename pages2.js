@@ -68,20 +68,37 @@ async function loadQuoteEvent(el, value, opts, alive, openDoc) {
           <div><label>שעת עלייה</label><input name="startTime" value="${esc(e.startTime)}"></div>
           <div><label>מוצר</label><select name="eventType" id="q-type">${optionsHtml(opts.eventTypeOptions, e.eventType)}</select></div>
           <div><label>הגברה</label><select name="amplification">${optionsHtml(opts.amplificationOptions, e.amplification)}</select></div>
-          <div><label>מחיר (₪)</label><input name="price" inputmode="numeric" placeholder="למשל: 5,000"></div>
+          <div><label>כמות אורחים</label><input name="guestCountInWords" value="${esc(e.guestCount || '')}" placeholder="למשל: 300"></div>
           <div><label>משך מופע (דק׳)</label><input name="duration" value="50" inputmode="numeric"></div>
         </div>
+        <label>מחיר בסיס (₪)</label>
+        <div style="display:flex;gap:8px"><input name="price" inputmode="numeric" placeholder="למשל: 25,000" style="flex:1"><button class="btn ghost sm" type="button" id="q-suggest">💡 מחיר מוצע</button></div>
+        <p id="q-suggest-why" class="small muted" hidden></p>
         <label>הערה כללית</label><input name="notes" value="${esc(e.notes)}">
 
         <div id="q-host" hidden>
-          <label>✨ מספר אורחים במילים</label><input name="guestCountInWords" placeholder="למשל: שלושה">
           <label>אופציות (זמרים)</label>
           <div class="options-grid">${(opts.hostOptions || []).map(o => `
             <label class="check"><input type="checkbox" name="opt" value="${esc(o.name)}"><span><b>${esc(o.name)}</b> <span class="muted">${esc(o.info)}</span></span></label>`).join('')}</div>
         </div>
+        <div id="q-singer" hidden>
+          <label>🎤 זמר/ת</label><select name="singerName">${optionsHtml((opts.hostOptions || []).map(o => o.name), '', '— בחר זמר/ת —')}</select>
+          <label class="check"><input type="checkbox" id="q-lehaka"> בליווי להקה חיה (אחרת: על גבי פלייבק)</label>
+        </div>
+
+        <h3 class="small muted" style="margin:16px 0 0">תוספות</h3>
+        ${[['dj', '🎧 DJ', 'D.j. - תוספת DJ מטעמינו'], ['vj', '🎥 VJ', 'כולל צוות V.J (צוות צילום מעגל סגור) מטעמינו'], ['mc', '🎙️ מנחה', 'תוספת מנחה מטעמינו']].map(([k, label, text]) => `
+        <label class="check"><input type="checkbox" id="q-${k}"> ${label}</label>
+        <div id="q-${k}-box" hidden>
+          <div class="grid2"><div><label>מחיר</label><input name="${k}Price" value="${(opts.pricing || {})[k] || ''}" inputmode="numeric"></div></div>
+          <label>הטקסט בהצעה</label><textarea name="${k}CustomText" rows="2">${esc(text)}</textarea>
+        </div>`).join('')}
 
         <label class="check"><input type="checkbox" id="q-dist"> 🚗 תוספת מרחק</label>
         <div id="q-dist-box" hidden><input name="distanceExtra" value="2000" inputmode="numeric"></div>
+
+        <label class="check"><input type="checkbox" id="q-holiday"> 🕍 חג (×${(opts.pricing || {}).holiday ? opts.pricing.holiday.multiplier : 1.5})</label>
+        <label class="check"><input type="checkbox" id="q-holidayEve"> 🕯️ ערב חג (×${(opts.pricing || {}).holidayEve ? opts.pricing.holidayEve.multiplier : 2})</label>
 
         <label class="check"><input type="checkbox" id="q-eilat"> ✈️ אירוע באילת</label>
         <div id="q-eilat-box" class="grid2" hidden>
@@ -89,6 +106,18 @@ async function loadQuoteEvent(el, value, opts, alive, openDoc) {
           <div><label>חדרים רגילים</label><input type="number" name="regularRooms" value="2" min="0"></div>
           <div><label>חדרים משודרגים</label><input type="number" name="upgradedRooms" value="4" min="0"></div>
         </div>
+        <label class="check"><input type="checkbox" id="q-abroad"> 🌍 אירוע בחו"ל</label>
+        <div id="q-abroad-box" class="grid2" hidden>
+          <div><label>כרטיסי טיסה</label><input type="number" name="abroadFlightTickets" value="3" min="0"></div>
+          <div><label>חדרים רגילים</label><input type="number" name="abroadRegularRooms" value="2" min="0"></div>
+          <div><label>חדרים משודרגים</label><input type="number" name="abroadUpgradedRooms" value="4" min="0"></div>
+        </div>
+        <p id="q-total" class="small" style="margin:10px 0 0;font-weight:600"></p>
+
+        <h3 class="small muted" style="margin:16px 0 4px">📎 מפרטים לצירוף</h3>
+        <div id="q-specs">${(opts.specs || []).map(sp => `
+          <label class="check"><input type="checkbox" name="spec" value="${esc(sp.id)}"> <span>${esc(sp.name)} <a href="${esc(sp.url)}" target="_blank" class="small">צפייה</a></span></label>`).join('')}</div>
+        <p class="small muted" style="margin:4px 0 0">מסומנים לפי ההגברה וכמות האורחים — אפשר לשנות. נכנסים כקישור במסמך ומצורפים לסוף ה-PDF.</p>
 
         <button class="btn block" type="submit" style="margin-top:16px">✏️ צור מסמך הצעה לעריכה</button>
         <div class="btn-row">
@@ -100,22 +129,80 @@ async function loadQuoteEvent(el, value, opts, alive, openDoc) {
     <div id="q-result"></div>`;
 
   const form = $('#q', box);
+  const P = opts.pricing || {};
+  const on = id => $('#q-' + id, box).checked;
+  const num = v => parseFloat(String(v || '').replace(/,/g, '').replace(/[^\d.]/g, ''));
+  const guests = () => parseInt(String(form.elements.guestCountInWords.value).replace(/[^0-9]/g, ''), 10);
+
+  // מפרטים: מסומנים לפי הכלל של הכלי הישן, עד שמשנים ידנית
+  let specsTouched = false;
+  const autoSpecs = () => {
+    if (specsTouched) return;
+    const n = guests();
+    const want = [form.elements.amplification.value === 'באחריות הלקוח - לאשר מפרט' ? 'amp' : '',
+      !isNaN(n) && n > 1500 ? 'light_l' : !isNaN(n) && n > 500 ? 'light_m' : 'light_s'];
+    $$('[name=spec]', box).forEach(c => { c.checked = want.indexOf(c.value) >= 0; });
+  };
+  $('#q-specs', box).addEventListener('change', () => { specsTouched = true; });
+
+  const total = () => {
+    const base = num(form.elements.price.value);
+    if (isNaN(base)) return $('#q-total', box).textContent = '';
+    let t = base;
+    ['dj', 'vj', 'mc'].forEach(k => { if (on(k)) { const p = num(form.elements[k + 'Price'].value); if (!isNaN(p)) t += p; } });
+    if (on('dist')) { const x = num(form.elements.distanceExtra.value); if (!isNaN(x)) t += x; }
+    $('#q-total', box).textContent = t !== base ? `💰 סה"כ כולל הכל: ₪${t.toLocaleString('he-IL')}` : '';
+  };
+
   const toggle = () => {
-    $('#q-host', box).hidden = !$('#q-type', box).value.includes('מארח');
-    $('#q-eilat-box', box).hidden = !$('#q-eilat', box).checked;
-    $('#q-dist-box', box).hidden = !$('#q-dist', box).checked;
+    const type = $('#q-type', box).value;
+    $('#q-host', box).hidden = !type.includes('מארח');
+    $('#q-singer', box).hidden = !type.includes('מופע זמר');
+    ['eilat', 'abroad', 'dist', 'dj', 'vj', 'mc'].forEach(k => { $(`#q-${k}-box`, box).hidden = !on(k); });
+    if (on('holiday') && on('holidayEve')) $('#q-holiday', box).checked = false;
+    autoSpecs();
+    total();
   };
   form.addEventListener('change', toggle);
+  form.addEventListener('input', ev => { if (/price|Price|distanceExtra|guestCount/.test(ev.target.name || '')) { autoSpecs(); total(); } });
   toggle();
+
+  // מחיר מוצע — אותו חישוב כמו בכלי הישן (מחירון ב-PRICING)
+  $('#q-suggest', box).addEventListener('click', () => {
+    const type = $('#q-type', box).value, n = guests();
+    let base, label;
+    if (type.includes('פרטי')) { base = P.private; label = 'אירוע פרטי'; }
+    else if (/עסקי|חברה|ארגון/.test(type)) {
+      if (isNaN(n) || n <= 0) return toast('לאירוע עסקי צריך כמות אורחים', 'bad');
+      [base, label] = n < 150 ? [P.corporate.under150, 'עסקי עד 150'] : n <= 500 ? [P.corporate.from150, 'עסקי 150–500']
+        : n <= 1000 ? [P.corporate.from501, 'עסקי 501–1000'] : [P.corporate.over1000, 'עסקי מעל 1000'];
+    } else return toast('אין מחירון למוצר הזה — הזן ידנית (מוגדר ל"פרטי" ו"עסקי")', 'bad');
+    let adj = base; const steps = [`${label}: ₪${base.toLocaleString('he-IL')}`];
+    if (on('eilat')) { adj = Math.round(adj * P.eilat.multiplier) + P.eilat.extra; steps.push(`אילת ×${P.eilat.multiplier} +₪${P.eilat.extra.toLocaleString('he-IL')}`); }
+    else if (on('abroad')) { adj = Math.round(adj * P.abroad.multiplier); steps.push(`חו"ל ×${P.abroad.multiplier}`); }
+    if (on('holidayEve')) { adj = Math.round(adj * P.holidayEve.multiplier); steps.push(`ערב חג ×${P.holidayEve.multiplier}`); }
+    else if (on('holiday')) { adj = Math.round(adj * P.holiday.multiplier); steps.push(`חג ×${P.holiday.multiplier}`); }
+    form.elements.price.value = adj;
+    $('#q-suggest-why', box).hidden = false;
+    $('#q-suggest-why', box).textContent = `💡 ${steps.join(' → ')} = ₪${adj.toLocaleString('he-IL')} (אפשר לשנות)`;
+    total();
+  });
 
   const collect = () => {
     const fd = new FormData(form);
     const data = {};
     ['name', 'status', 'phone', 'eventDate', 'startTime', 'eventType', 'amplification', 'price', 'duration', 'notes',
-     'guestCountInWords', 'distanceExtra', 'flightTickets', 'regularRooms', 'upgradedRooms'].forEach(k => { data[k] = (fd.get(k) || '').toString().trim(); });
-    data.isEilat = $('#q-eilat', box).checked;
-    data.hasDistance = $('#q-dist', box).checked;
+     'guestCountInWords', 'distanceExtra', 'flightTickets', 'regularRooms', 'upgradedRooms',
+     'abroadFlightTickets', 'abroadRegularRooms', 'abroadUpgradedRooms', 'singerName',
+     'djPrice', 'djCustomText', 'vjPrice', 'vjCustomText', 'mcPrice', 'mcCustomText'].forEach(k => { data[k] = (fd.get(k) || '').toString().trim(); });
+    data.isEilat = on('eilat');
+    data.isAbroad = on('abroad');
+    data.hasDistance = on('dist');
+    data.hasDj = on('dj'); data.hasVj = on('vj'); data.hasMc = on('mc');
+    data.isHoliday = on('holiday'); data.isHolidayEve = on('holidayEve');
+    data.hasLehaka = on('lehaka');
     data.selectedOptions = $('#q-host', box).hidden ? [] : fd.getAll('opt');
+    data.specs = fd.getAll('spec');
     return data;
   };
 
