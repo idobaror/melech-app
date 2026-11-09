@@ -336,7 +336,7 @@ PAGES.home = {
         'אין אירועים קרובים', '<a class="small" href="#/events?f=upcoming">הכול</a>');
     }
     if (d.unpaid && d.unpaid.length) {
-      h += listCard('💰 לגבייה — קרו ולא שולמו', d.unpaid.map(e => eventItem(e, esc(e.officeStatus || 'לא עודכן'), '<span class="badge bad">לגבות</span>')), '');
+      h += listCard('💰 לגבייה — קרו ולא שולמו', d.unpaid.map(e => eventItem(e, esc(e.total != null ? `נחתם ${money(e.total)} · שולם ${money(e.total - e.balance)}` : (e.officeStatus || 'לא הוזן סכום')), `<span class="badge bad">${e.balance != null ? 'יתרה ' + money(e.balance) : 'לגבות'}</span>`)), '');
     }
     if (d.newRequests && d.newRequests.length) {
       h += listCard('🆕 פניות מהשבוע האחרון', d.newRequests.map(e => eventItem(e, null, statusBadge(e.status))), '');
@@ -620,6 +620,81 @@ function quotesSection(d) {
     </div>`).join('') : '<p class="empty">עוד לא הופקה הצעה</p>'}</section>`;
 }
 
+// ----- גבייה (ידני): סכום שנחתם כולל מע"מ + תשלומים -----
+const money = n => n == null ? '—' : '₪' + Number(n).toLocaleString('he-IL');
+
+function billingSection(d) {
+  const b = d.billing;
+  if (!b) return '';
+  const edit = can('billing');
+  const today = new Date().toISOString().slice(0, 10);
+  const pct = b.total ? Math.min(100, Math.round(100 * b.paid / b.total)) : 0;
+  const state = b.total == null ? '<span class="badge warn">לא הוזן סכום</span>'
+    : b.balance <= 0 ? '<span class="badge ok">שולם במלואו</span>'
+    : `<span class="badge bad">יתרה ${money(b.balance)}</span>`;
+  return `<section class="card" id="bill-card"><div class="card-head"><h2>💰 גבייה</h2>${state}</div>
+    <dl class="kv">
+      <dt>סכום שנחתם</dt><dd><b>${money(b.total)}</b>${b.total != null ? ` <span class="small muted">כולל מע"מ · ${money(b.beforeVat)} לפני</span>` : ''}</dd>
+      <dt>שולם</dt><dd>${money(b.paid)}</dd>
+      ${b.total != null ? `<dt>יתרה</dt><dd><b>${money(b.balance)}</b></dd>` : ''}
+    </dl>
+    ${b.total ? `<div class="cf-progress" style="margin:8px 0"><span style="width:${pct}%"></span></div>` : ''}
+    ${b.totalNote ? `<p class="small muted" style="margin:0">${esc(b.totalNote)}</p>` : ''}
+    ${b.payments.length ? `<h3 class="small muted" style="margin:12px 0 4px">תשלומים</h3>${b.payments.map(p => `
+      <div class="crew-row"><div class="grow"><b>${money(p.amount)}</b> <span class="small muted">${esc(fmtDate(p.date) || p.date)}${p.method ? ' · ' + esc(p.method) : ''}</span>
+        <div class="small muted">${esc(p.note ? p.note + ' · ' : '')}נרשם ע"י ${esc(p.by)}</div></div>
+        ${edit ? `<button class="btn sm danger" data-bill-cancel="${esc(p.id)}" aria-label="בטל תשלום">✕</button>` : ''}</div>`).join('')}` : ''}
+    ${edit ? `
+    <div class="btn-row">
+      <button class="btn secondary sm" data-bill-open="pay">+ תשלום שהתקבל</button>
+      <button class="btn ghost sm" data-bill-open="total">${b.total == null ? 'הזן סכום שנחתם' : 'עדכן סכום שנחתם'}</button>
+    </div>
+    <form id="bill-pay" hidden>
+      <div class="grid2">
+        <div><label>סכום</label><input name="amount" inputmode="decimal" dir="ltr" placeholder="${b.balance > 0 ? b.balance : ''}" required></div>
+        <div><label>תאריך</label><input name="date" type="date" value="${today}"></div>
+      </div>
+      <label>אמצעי</label><select name="method">${optionsHtml(['העברה בנקאית', 'ביט', 'צ׳ק', 'מזומן', 'אשראי', 'אחר'], '', '— לא חובה —')}</select>
+      <label>הערה</label><input name="note" maxlength="300" placeholder="למשל: מקדמה">
+      <div class="btn-row"><button class="btn" type="submit">רשום תשלום</button><button class="btn ghost" type="button" data-bill-close>ביטול</button></div>
+    </form>
+    <form id="bill-total" hidden>
+      <label>סכום שנחתם — כולל מע"מ</label><input name="amount" inputmode="decimal" dir="ltr" value="${b.total ?? ''}" required>
+      <label>הערה</label><input name="note" maxlength="300" placeholder="למשל: כולל תוספת נסיעה">
+      <div class="btn-row"><button class="btn" type="submit">שמור</button><button class="btn ghost" type="button" data-bill-close>ביטול</button></div>
+    </form>` : ''}
+  </section>`;
+}
+
+function bindBilling(el, d) {
+  const card = $('#bill-card', el);
+  if (!card || !can('billing')) return;
+  const e = d.event;
+  const redraw = b => { d.billing = b; card.outerHTML = billingSection(d); bindBilling(el, d); };
+  const forms = { pay: $('#bill-pay', card), total: $('#bill-total', card) };
+  $$('[data-bill-open]', card).forEach(btn => btn.addEventListener('click', () => {
+    Object.keys(forms).forEach(k => { forms[k].hidden = k !== btn.dataset.billOpen; });
+    forms[btn.dataset.billOpen].querySelector('input').focus();
+  }));
+  $$('[data-bill-close]', card).forEach(btn => btn.addEventListener('click', () => { forms.pay.hidden = forms.total.hidden = true; }));
+  const submit = (form, action, okMsg) => form.addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const payload = Object.fromEntries(new FormData(form).entries());
+    busy(true, 'שומר…');
+    try { redraw(await api(action, Object.assign({ row: e.row, key: e.key }, payload))); toast(okMsg, 'ok'); S.cache.home = null; }
+    catch (err) { toast(err.message, 'bad'); } finally { busy(false); }
+  });
+  submit(forms.pay, 'billing_add_payment', 'התשלום נרשם ✅');
+  submit(forms.total, 'billing_set_total', 'הסכום נשמר ✅');
+  $$('[data-bill-cancel]', card).forEach(btn => btn.addEventListener('click', async () => {
+    const p = d.billing.payments.find(x => x.id === btn.dataset.billCancel);
+    if (!confirm(`לבטל את התשלום של ${money(p.amount)}?`)) return;
+    busy(true, 'מבטל…');
+    try { redraw(await api('billing_cancel', { row: e.row, key: e.key, id: p.id })); toast('התשלום בוטל', 'ok'); }
+    catch (err) { toast(err.message, 'bad'); } finally { busy(false); }
+  }));
+}
+
 function crewReadonlyList(d) {
   return d.crew.map(c => `<div class="crew-row"><div class="grow"><b>${esc(c.name)}</b>
     <div class="sub small muted">${esc(c.role || '')}${c.confirm === 'לא זמין' && c.confirmNote ? ' · ' + esc(c.confirmNote) : ''}</div></div>
@@ -651,6 +726,7 @@ function renderReadOnlyEvent(el, d) {
     <section class="card"><h2>👥 הצוות באירוע</h2>${crewReadonlyList(d)}</section>
     ${requestsSection(d, e)}
     ${e.followUp ? `<section class="card"><h2>📝 פולואפ מכירות</h2><div class="note-box">${esc(e.followUp)}</div></section>` : ''}
+    ${billingSection(d)}
     ${sameDaySection(d, e)}
     ${quotesSection(d)}
     ${notesSection(d.notes)}
@@ -658,6 +734,7 @@ function renderReadOnlyEvent(el, d) {
   bindMyConfirm(el, e);
   bindTravel(el, d, e);
   bindClientForm(el, d);
+  bindBilling(el, d);
   bindNotes(el, e);
 }
 
@@ -727,6 +804,7 @@ function renderEditableEvent(el, d, opts) {
     </section>
 
     ${requestsSection(d, e)}
+    ${billingSection(d)}
     ${sameDaySection(d, e)}
     ${quotesSection(d)}
 
@@ -824,6 +902,7 @@ function renderEditableEvent(el, d, opts) {
   bindMyConfirm(el, e);
   bindTravel(el, d, e);
   bindClientForm(el, d);
+  bindBilling(el, d);
   bindNotes(el, e);
 }
 
