@@ -396,11 +396,17 @@ PAGES.events = {
     let f = r.q.get('f') || 'upcoming';
     if (!filters.some(x => x[0] === f)) f = 'upcoming';
     let q = '';
+    // ריכוז לפי איש צוות (במקום הלשונית בגיליון)
+    const people = {};
+    if (all) events.forEach(e => (e.crewList || []).forEach(c => { people[c.id] = c.name; }));
+    let person = r.q.get('p') || '';
+    if (person && !people[person]) person = '';
 
     el.innerHTML = `
       ${eventsViewSwitch('list')}
       ${can('event_create') && writeOn('MAIN') ? '<a class="btn block" href="#/new" style="margin-bottom:12px">+ פנייה חדשה</a>' : ''}
       <input id="ev-search" type="search" placeholder="🔍 חיפוש לפי שם, מיקום או סוג" style="margin-bottom:10px">
+      ${Object.keys(people).length ? `<select id="ev-person" style="margin-bottom:10px"><option value="">👥 כל הצוות</option>${Object.keys(people).sort((a, b) => people[a].localeCompare(people[b], 'he')).map(id => `<option value="${esc(id)}" ${id === person ? 'selected' : ''}>${esc(people[id])}</option>`).join('')}</select>` : ''}
       <div class="chips">${filters.map(([k, t]) => `<button class="chip" data-f="${k}">${t}</button>`).join('')}</div>
       <section class="card"><div id="ev-list" class="list"></div></section>`;
 
@@ -409,6 +415,7 @@ PAGES.events = {
       $$('.chip', el).forEach(c => c.classList.toggle('on', c.dataset.f === f));
       const list = events.filter(e => {
         if (q && !(`${e.name} ${e.location} ${e.eventType} ${e.status}`.toLowerCase().includes(q))) return false;
+        if (person && !(e.crewList || []).some(c => c.id === person)) return false;
         const active = all ? e.status && e.status !== 'נפל' : true;   // "האירועים שלי" כבר בלי נופלים
         switch (f) {
           case 'upcoming': return active && e.date && e.date >= today;
@@ -422,12 +429,16 @@ PAGES.events = {
       list.sort((a, b) => f === 'past' ? (b.date || '').localeCompare(a.date || '') : (a.date || '9999').localeCompare(b.date || '9999'));
       $('#ev-list', el).innerHTML = list.length
         ? list.slice(0, 200).map(e => all
-            ? eventItem(e, esc([e.eventType, e.location].filter(Boolean).join(' · ')), statusBadge(e.status) + (e.crew ? ` <span class="badge">👥 ${e.crew}</span>` : ''))
+            ? (person
+              ? (c => eventItem(e, esc([c.role, e.location].filter(Boolean).join(' · ')), confirmBadge(c)))((e.crewList || []).find(c => c.id === person))
+              : eventItem(e, esc([e.eventType, e.location].filter(Boolean).join(' · ')), statusBadge(e.status) + (e.crew ? ` <span class="badge">👥 ${e.crew}</span>` : '')))
             : eventItem(e, esc([e.myRole, e.location].filter(Boolean).join(' · ')), confirmBadge(e))).join('')
         : `<p class="empty">${all ? 'לא נמצאו אירועים' : 'אין אירועים שאתה משובץ אליהם'}</p>`;
     };
     if (!all) $('#ev-search', el).placeholder = '🔍 חיפוש באירועים שלי';
-    $$('.chip', el).forEach(c => c.addEventListener('click', () => { f = c.dataset.f; history.replaceState(null, '', `#/events?f=${f}`); draw(); }));
+    const sel = $('#ev-person', el);
+    if (sel) sel.addEventListener('change', () => { person = sel.value; history.replaceState(null, '', `#/events?f=${f}${person ? '&p=' + encodeURIComponent(person) : ''}`); draw(); });
+    $$('.chip', el).forEach(c => c.addEventListener('click', () => { f = c.dataset.f; history.replaceState(null, '', `#/events?f=${f}${person ? '&p=' + encodeURIComponent(person) : ''}`); draw(); }));
     $('#ev-search', el).addEventListener('input', e => { q = e.target.value.trim().toLowerCase(); draw(); });
     draw();
   }
