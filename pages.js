@@ -300,7 +300,7 @@ PAGES.home = {
     if (kpis.length) h += `<div class="kpis">${kpis.join('')}</div>`;
 
     const actions = [];
-    if (can('event_create')) actions.push('<a class="btn" href="#/new">+ פנייה חדשה</a>');
+    if (can('event_create') && writeOn('MAIN')) actions.push('<a class="btn" href="#/new">+ פנייה חדשה</a>');
     if (can('requests')) actions.push('<a class="btn secondary" href="#/request-new">📨 שאלה / בקשת אישור</a>');
     if (actions.length) h += `<div class="btn-row" style="margin:0 0 14px">${actions.join('')}</div>`;
 
@@ -399,7 +399,7 @@ PAGES.events = {
 
     el.innerHTML = `
       ${eventsViewSwitch('list')}
-      ${can('event_create') ? '<a class="btn block" href="#/new" style="margin-bottom:12px">+ פנייה חדשה</a>' : ''}
+      ${can('event_create') && writeOn('MAIN') ? '<a class="btn block" href="#/new" style="margin-bottom:12px">+ פנייה חדשה</a>' : ''}
       <input id="ev-search" type="search" placeholder="🔍 חיפוש לפי שם, מיקום או סוג" style="margin-bottom:10px">
       <div class="chips">${filters.map(([k, t]) => `<button class="chip" data-f="${k}">${t}</button>`).join('')}</div>
       <section class="card"><div id="ev-list" class="list"></div></section>`;
@@ -520,7 +520,7 @@ ${link}
       <button class="btn ghost sm" data-copy-client>📋 העתק קישור</button>
       <a class="btn ghost sm" target="_blank" href="${esc(link)}">👁️ איך הלקוח רואה</a>
     </div>
-    <button class="btn secondary block" data-staff-fill style="margin-top:10px">✏️ מלא / תקן בשם הלקוח</button>
+    ${writeOn('CLIENT_FORM') ? '<button class="btn secondary block" data-staff-fill style="margin-top:10px">✏️ מלא / תקן בשם הלקוח</button>' : ''}
     <form id="cf-staff" hidden>
       <p class="small muted" style="margin:12px 0 0">למשל אחרי שיחה עם הלקוח. אפשר להשלים וגם לתקן — הכול נרשם ביומן השינויים.</p>
       ${c.fields.map(staffFieldHtml).join('')}
@@ -551,6 +551,7 @@ function bindClientForm(el, d) {
   const form = $('#cf-staff', el);
   if (!form) return;
   const openBtn = $('[data-staff-fill]', el);
+  if (!openBtn) return;
   openBtn.addEventListener('click', () => { form.hidden = false; openBtn.hidden = true; const first = form.querySelector('input:not([type=checkbox]), textarea'); if (first) first.focus(); });
   $('[data-staff-cancel]', el).addEventListener('click', () => { form.hidden = true; openBtn.hidden = false; });
   form.addEventListener('submit', async ev => {
@@ -695,6 +696,7 @@ function renderEditableEvent(el, d, opts) {
 
     <section class="card">
       <h2>✏️ פרטי האירוע</h2>
+      ${writeOn('MAIN') ? '' : `<p class="small muted" style="margin:0 0 8px">${PARALLEL_NOTE}</p>`}
       <form id="ev-form">
         <label>שם אירוע</label>${input('name', e.name)}
         <div class="grid2">
@@ -720,7 +722,7 @@ function renderEditableEvent(el, d, opts) {
     ${'followUp' in e ? `<section class="card">
       <h2>📝 פולואפ מכירות</h2>
       <div id="fu-box">${e.followUp ? `<div class="note-box">${esc(e.followUp)}</div>` : '<p class="empty">אין הערות עדיין</p>'}</div>
-      ${can('sales') ? `<label>הערה חדשה</label><textarea id="fu-text" rows="2"></textarea>
+      ${can('sales') && writeOn('MAIN') ? `<label>הערה חדשה</label><textarea id="fu-text" rows="2"></textarea>
       <button class="btn secondary block" id="fu-add" style="margin-top:10px">הוסף לפולואפ</button>` : ''}
     </section>` : ''}
 

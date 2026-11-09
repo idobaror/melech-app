@@ -13,6 +13,10 @@ function esc(v) {
 
 // הרשאות: "admin" פותח הכול
 // 'x' = הרשאת x · 'view:x' = הרשאת x או "צפייה בכל דבר" · פונקציה = תנאי מותאם
+// מתגי כתיבה מהשרת (עבודה במקביל לכלים הקיימים). בלי מידע — מניחים דלוק
+function writeOn(area) { return !S.user || !S.user.writes || S.user.writes[area] !== false; }
+const PARALLEL_NOTE = '🔒 בינתיים עושים את זה בגיליון — עבודה במקביל לכלים הקיימים';
+
 function can(perm) {
   if (!S.user) return false;
   if (!perm) return true;

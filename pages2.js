@@ -193,6 +193,7 @@ PAGES.protocol = {
 
     // צפייה בלבד (למשל הבעלים)
     if (!can('protocol')) { el.innerHTML = pastHtml; return; }
+    if (!writeOn('PROTOCOL')) { el.innerHTML = `<section class="card"><p class="small muted" style="margin:0">${PARALLEL_NOTE}</p></section>` + pastHtml; return; }
 
     const preRow = r.q.get('row'), preKey = r.q.get('k');
     const all = canView('events_all') ? await cached('events', () => api('events_list'), 60 * 1000) : await api('my_events');
