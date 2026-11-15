@@ -372,3 +372,4 @@ details.fold[open] > summary { margin-bottom: 8px; padding-bottom: 6px; border-b
 .kpi span { font-size: 12px; line-height: 1.25; }
 .kpis { grid-template-columns: repeat(2, 1fr); }
 @media (min-width: 560px) { .kpis { grid-template-columns: repeat(3, 1fr); } }
+.sign-pad { width: 100%; height: auto; aspect-ratio: 600 / 250; background: #fff; border: 2px dashed var(--line); border-radius: 12px; touch-action: none; display: block; margin-top: 6px; }

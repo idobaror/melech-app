@@ -253,8 +253,15 @@ async function exportQuote(box, e, docId, lastEmail) {
   } catch (err) { toast(err.message, 'bad'); } finally { busy(false); }
 }
 
-function showQuoteResult(box, e, res, lastEmail) {
-  const msg = `שלום,\nמצורפת הצעת המחיר עבור ${e.name}:\n${res.pdfUrl}\n\nנשמח לעמוד לרשותך לכל שאלה 🎤\nמלך הקסטות`;
+// קישור ללקוח: צפייה בהצעה או אישור וחתימה (quote.html)
+const signLink = token => new URL('quote.html?t=' + encodeURIComponent(token), location.href).href;
+
+async function showQuoteResult(box, e, res, lastEmail) {
+  if (!res.signToken && res.pdfId && !res.signed) {
+    try { res.signToken = (await api('quote_sign_link', { pdfId: res.pdfId })).token; } catch (err) { /* בלי קישור — נשלח את ה-PDF */ }
+  }
+  const link = res.signToken ? signLink(res.signToken) : res.pdfUrl;
+  const msg = `היי, מה נשמע?\nמצורפת הצעת המחיר עבור ${e.name}:\n${link}\n${res.signToken ? 'בקישור אפשר לצפות בהצעה, ואם הכול מתאים — לאשר ולחתום ישירות 🙏\n' : ''}לכל שאלה אני כאן 🎤`;
   box.innerHTML = `
     <section class="card" style="border-color:var(--ok)">
       <h2>✅ ההצעה מוכנה</h2>
@@ -262,6 +269,7 @@ function showQuoteResult(box, e, res, lastEmail) {
       ${res.mergeError ? `<p class="small" style="color:var(--warn)">⚠️ ${esc(res.mergeError)}</p>` : ''}
       <div class="btn-row">
         <a class="btn ghost" href="${esc(res.pdfUrl)}" target="_blank">👁️ צפה ב-PDF</a>
+        ${res.signToken ? `<a class="btn ghost" href="${esc(signLink(res.signToken))}" target="_blank">✍️ איך הלקוח רואה</a>` : ''}
         <a class="btn ghost" href="${esc(res.docUrl)}" target="_blank">✏️ ערוך מסמך</a>
         ${res.docId ? '<button class="btn ghost" id="q-reexport">🔁 ייצא שוב (אחרי תיקון)</button>' : ''}
       </div>
@@ -269,11 +277,12 @@ function showQuoteResult(box, e, res, lastEmail) {
       <div class="btn-row" style="margin-top:6px">
         ${e.phone ? `<a class="btn wa" id="q-wa" href="${waLink(e.phone, msg)}" target="_blank">📲 וואטסאפ ללקוח</a>` : '<span class="small muted">אין טלפון לקוח</span>'}
         <button class="btn secondary" id="q-mail-open">📧 שליחה במייל</button>
+        ${res.signToken ? '<button class="btn ghost" id="q-copy-link">🔗 העתק קישור</button>' : ''}
       </div>
       <form id="q-mail" hidden>
         <label>מייל הלקוח</label><input name="to" type="email" required value="${esc(lastEmail)}" placeholder="client@example.com">
         <label>נושא</label><input name="subject" value="${esc('הצעת מחיר — ' + e.name)}">
-        <label>הודעה</label><textarea name="body" rows="4">${esc(`שלום,\nמצורפת הצעת המחיר עבור ${e.name}.\nנשמח לעמוד לרשותך לכל שאלה.\n\nבברכה,\nמלך הקסטות`)}</textarea>
+        <label>הודעה</label><textarea name="body" rows="4">${esc(`היי, מה נשמע?\nמצורפת הצעת המחיר עבור ${e.name}.${res.signToken ? `\n\nלאישור וחתימה דיגיטלית: ${signLink(res.signToken)}` : ''}\n\nלכל שאלה אני כאן,\nמלך הקסטות`)}</textarea>
         <p class="small muted">ה-PDF יצורף למייל${S.user.env === 'production' ? '' : ' · 🧪 בסביבת בדיקה המייל יגיע אליך ולא ללקוח'}</p>
         <button class="btn block" type="submit">שלח מייל</button>
       </form>
@@ -283,6 +292,7 @@ function showQuoteResult(box, e, res, lastEmail) {
     api('quote_mark_sent', { pdfId: res.pdfId, channel: 'whatsapp' }).catch(() => {});
   });
   if ($('#q-reexport', box)) $('#q-reexport', box).addEventListener('click', () => exportQuote(box, e, res.docId, lastEmail));
+  if ($('#q-copy-link', box)) $('#q-copy-link', box).addEventListener('click', async () => toast(await copyText(signLink(res.signToken)) ? 'הקישור ללקוח הועתק 🔗' : 'לא הצלחתי להעתיק', 'ok'));
   $('#q-mail-open', box).addEventListener('click', () => { $('#q-mail', box).hidden = false; $('#q-mail [name=to]', box).focus(); });
   $('#q-mail', box).addEventListener('submit', async ev => {
     ev.preventDefault();

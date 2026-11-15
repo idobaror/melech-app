@@ -625,23 +625,32 @@ function paymentMessage(d) {
   const when = e.date ? ' ב-' + e.date.split('-').reverse().join('/') : '';
   const paid = b.payments.map(p => `• ${money(p.amount)}${p.date ? ' — ' + p.date.split('-').reverse().join('/') : ''}${p.method ? ' (' + p.method + ')' : ''}`);
   if (b.balance <= 0) {
-    return [`שלום,`, `תודה רבה! קיבלנו את מלוא התשלום עבור ${e.displayName || e.name}${when} — ${money(b.total)} (כולל מע"מ).`, '',
-      `היה לנו כיף גדול איתכם 🎤`, `צוות מלך הקסטות 👑`].join('\n');
+    return [`היי, מה נשמע?`, `רק רציתי לעדכן שהתקבל מלוא התשלום עבור ${e.displayName || e.name}${when} — ${money(b.total)} (כולל מע"מ).`, '',
+      `תודה רבה! 🎤`].join('\n');
   }
   return [
-    `שלום,`,
-    `תודה שבחרתם במלך הקסטות 👑`,
-    `מצרפים ריכוז תשלום עבור ${e.displayName || e.name}${when}:`,
+    `היי, מה נשמע?`,
+    `מצורף ריכוז תשלום עבור ${e.displayName || e.name}${when}:`,
     '',
     `סה"כ לתשלום (כולל מע"מ): ${money(b.total)}`,
     `שולם עד כה: ${money(b.paid)}`,
     ...(paid.length ? paid : []),
     `*יתרה לתשלום: ${money(b.balance)}*`,
     '',
-    `נשמח להסדרת היתרה בהקדם. לכל שאלה אנחנו כאן 🙏`,
-    `צוות מלך הקסטות`
+    ...BANK_DETAILS,
+    '',
+    `אשמח להסדרת היתרה בהקדם. לכל שאלה אני כאן 🙏`
   ].join('\n');
 }
+
+// פרטי חשבון להעברה — מופיעים בהודעת התשלום
+const BANK_DETAILS = [
+  '*פרטים להעברה בנקאית:*',
+  'בנק לאומי (10), סניף 837',
+  'מספר חשבון 56450016',
+  'ע"ש שיקר הפקות בע"מ, ח.פ. 516995131',
+  'נא לציין את שם המזמין וסיבת ההעברה'
+];
 
 function bindBilling(el, d) {
   const card = $('#bill-card', el);
@@ -966,8 +975,9 @@ function quotesFold(d) {
     <div class="crew-row"><div class="grow">${q.draft ? `<b>${esc(q.created)}</b>` : `<a href="${esc(q.pdfUrl)}" target="_blank">${esc(q.created)}</a>`}
       <span class="small muted">${esc(q.by)}${q.docUrl ? ` · <a href="${esc(q.docUrl)}" target="_blank">מסמך</a>` : ''}</span></div>
       ${q.draft ? `<span class="badge warn">טיוטה</span>${can('quotes') ? ` <a class="btn sm secondary" href="${open(q)}">📄 ייצא</a>` : ''}` : ''}
-      ${q.sentWhatsapp ? '<span class="badge ok">וואטסאפ</span>' : ''}${q.sentEmail ? ' <span class="badge ok">מייל</span>' : ''}
-    </div>`).join('') : '<p class="empty">עוד לא הופקה הצעה</p>', drafts > 0, `<span class="badge${drafts ? ' warn' : ''}">${drafts ? drafts + ' טיוטה' : d.quotes.length}</span>`);
+      ${q.signed ? `<a class="badge ok" href="${esc(q.signed.url)}" target="_blank" title="${esc(q.signed.name + ' · ' + q.signed.at)}">✍️ נחתמה</a>` : ''}
+      ${!q.signed && q.sentWhatsapp ? '<span class="badge ok">וואטסאפ</span>' : ''}${!q.signed && q.sentEmail ? ' <span class="badge ok">מייל</span>' : ''}
+    </div>${q.signed ? `<div class="small muted" style="margin:-4px 0 6px">נחתם ע"י ${esc(q.signed.name)} · ${esc(q.signed.at)}</div>` : ''}`).join('') : '<p class="empty">עוד לא הופקה הצעה</p>', drafts > 0, `<span class="badge${drafts ? ' warn' : ''}">${drafts ? drafts + ' טיוטה' : d.quotes.length}</span>`);
 }
 
 function sameDayFold(d, e) {
