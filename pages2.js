@@ -418,7 +418,7 @@ function renderChecklist(el, cl) {
         <p class="muted">${esc(remarks || (short ? 'חלק מהסעיפים לא הושלמו — מצוין בדוח.' : 'כל הסעיפים אומתו והתמונות נשמרו.'))}</p>
         <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px">
           ${res.managers.map(m => `<a class="btn wa block" target="_blank" href="${waLink(m.phone, msg)}">שלח ל${esc(m.name)} בוואטסאפ</a>`).join('')}
-          ${res.managers.length ? '' : `<a class="btn wa block" target="_blank" href="https://wa.me/?text=${encodeURIComponent(msg)}">שתף בוואטסאפ</a>`}
+          ${res.managers.length ? '' : `<a class="btn wa block" target="_blank" href="${waLink('', msg)}">שתף בוואטסאפ</a>`}
           <a class="btn secondary block" href="#/report/${encodeURIComponent(res.id)}">צפה בדוח</a>
         </div></section>`;
     } catch (err) { toast(err.message, 'bad'); } finally { busy(false); }

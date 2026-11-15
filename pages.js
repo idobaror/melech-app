@@ -591,7 +591,17 @@ function billingSection(d) {
     <div class="btn-row">
       <button class="btn secondary sm" data-bill-open="pay">+ תשלום שהתקבל</button>
       <button class="btn ghost sm" data-bill-open="total">${b.total == null ? 'הזן סכום שנחתם' : 'עדכן סכום שנחתם'}</button>
+      ${b.total != null ? `<button class="btn ghost sm" type="button" data-bill-open="msg">📲 הודעת תשלום ללקוח</button>` : ''}
     </div>
+    ${b.total != null ? `<form id="bill-msg" hidden>
+      <label>ההודעה (אפשר לערוך לפני השליחה)</label>
+      <textarea name="text" rows="9">${esc(paymentMessage(d))}</textarea>
+      <div class="btn-row">
+        ${d.event.phone ? `<button class="btn wa" type="button" id="bill-msg-wa">📲 שלח בוואטסאפ</button>` : '<span class="small muted">אין טלפון לקוח באירוע</span>'}
+        <button class="btn ghost" type="button" id="bill-msg-copy">📋 העתק</button>
+        <button class="btn ghost" type="button" data-bill-close>ביטול</button>
+      </div>
+    </form>` : ''}
     <form id="bill-pay" hidden>
       <div class="grid2">
         <div><label>סכום</label><input name="amount" inputmode="decimal" dir="ltr" placeholder="${b.balance > 0 ? b.balance : ''}" required></div>
@@ -609,17 +619,48 @@ function billingSection(d) {
   </section>`;
 }
 
+// הודעה מנומסת ללקוח: סה"כ, מה ששולם (עם פירוט) ויתרה
+function paymentMessage(d) {
+  const e = d.event, b = d.billing;
+  const when = e.date ? ' ב-' + e.date.split('-').reverse().join('/') : '';
+  const paid = b.payments.map(p => `• ${money(p.amount)}${p.date ? ' — ' + p.date.split('-').reverse().join('/') : ''}${p.method ? ' (' + p.method + ')' : ''}`);
+  if (b.balance <= 0) {
+    return [`שלום,`, `תודה רבה! קיבלנו את מלוא התשלום עבור ${e.displayName || e.name}${when} — ${money(b.total)} (כולל מע"מ).`, '',
+      `היה לנו כיף גדול איתכם 🎤`, `צוות מלך הקסטות 👑`].join('\n');
+  }
+  return [
+    `שלום,`,
+    `תודה שבחרתם במלך הקסטות 👑`,
+    `מצרפים ריכוז תשלום עבור ${e.displayName || e.name}${when}:`,
+    '',
+    `סה"כ לתשלום (כולל מע"מ): ${money(b.total)}`,
+    `שולם עד כה: ${money(b.paid)}`,
+    ...(paid.length ? paid : []),
+    `*יתרה לתשלום: ${money(b.balance)}*`,
+    '',
+    `נשמח להסדרת היתרה בהקדם. לכל שאלה אנחנו כאן 🙏`,
+    `צוות מלך הקסטות`
+  ].join('\n');
+}
+
 function bindBilling(el, d) {
   const card = $('#bill-card', el);
   if (!card || !can('billing')) return;
   const e = d.event;
   const redraw = b => { d.billing = b; card.outerHTML = billingSection(d); bindBilling(el, d); };
   const forms = { pay: $('#bill-pay', card), total: $('#bill-total', card) };
+  if ($('#bill-msg', card)) forms.msg = $('#bill-msg', card);
   $$('[data-bill-open]', card).forEach(btn => btn.addEventListener('click', () => {
     Object.keys(forms).forEach(k => { forms[k].hidden = k !== btn.dataset.billOpen; });
-    forms[btn.dataset.billOpen].querySelector('input').focus();
+    const f = forms[btn.dataset.billOpen].querySelector('input, textarea'); if (f) f.focus();
   }));
-  $$('[data-bill-close]', card).forEach(btn => btn.addEventListener('click', () => { forms.pay.hidden = forms.total.hidden = true; }));
+  $$('[data-bill-close]', card).forEach(btn => btn.addEventListener('click', () => { Object.keys(forms).forEach(k => { forms[k].hidden = true; }); }));
+  if (forms.msg) {
+    const text = () => forms.msg.elements.text.value;
+    const wa = $('#bill-msg-wa', card);
+    if (wa) wa.addEventListener('click', () => { location.href = waLink(e.phone, text()); });
+    $('#bill-msg-copy', card).addEventListener('click', async () => toast(await copyText(text()) ? 'ההודעה הועתקה 📋' : 'לא הצלחתי להעתיק', 'ok'));
+  }
   const submit = (form, action, okMsg) => form.addEventListener('submit', async ev => {
     ev.preventDefault();
     const payload = Object.fromEntries(new FormData(form).entries());
@@ -705,8 +746,8 @@ function detailsCard(d, opts) {
     <div class="chips-row">
       ${e.phone ? `<a class="chip-btn wa" href="${waLink(e.phone)}" target="_blank">וואטסאפ</a><a class="chip-btn" href="tel:${esc(e.phone)}">📞 חייג</a>` : ''}
       <button class="chip-btn" type="button" id="ev-copy">📋 העתק פרטים</button>
-      ${link && e.phone && missing.length ? `<a class="chip-btn" target="_blank" href="${waLink(e.phone, clientMsg)}">📲 טופס ללקוח</a>` : ''}
-      ${link ? `<button class="chip-btn" type="button" id="ev-copy-link">🔗 קישור ללקוח</button>` : ''}
+      ${link && e.phone && missing.length ? `<a class="chip-btn" target="_blank" href="${waLink(e.phone, clientMsg)}">📲 שלח טופס ללקוח</a>` : ''}
+      ${link ? `<button class="chip-btn" type="button" id="ev-copy-link">🔗 העתק קישור לטופס</button>` : ''}
       ${can('quotes') ? `<a class="chip-btn" href="#/quote?row=${e.row}&k=${encodeURIComponent(e.key)}">📄 הצעה</a>` : ''}
       ${can('protocol') ? `<a class="chip-btn" href="#/protocol?row=${e.row}&k=${encodeURIComponent(e.key)}">🔧 הקמה</a>` : ''}
       ${canEditAny ? `<button class="chip-btn brand" type="button" id="ev-edit-open">✏️ עריכה</button>` : ''}
@@ -746,7 +787,7 @@ function bindDetails(el, d) {
   const e = d.event, cf = d.clientForm;
   $('#ev-copy', el).addEventListener('click', async () => toast(await copyText(eventCopyText(e, cf)) ? 'הפרטים הועתקו 📋' : 'לא הצלחתי להעתיק', 'ok'));
   if ($('#ev-copy-link', el)) $('#ev-copy-link', el).addEventListener('click', async () =>
-    toast(await copyText(clientFormLink(cf.token)) ? 'הקישור ללקוח הועתק 🔗' : 'לא הצלחתי להעתיק', 'ok'));
+    toast(await copyText(clientFormLink(cf.token)) ? 'הקישור לטופס הלקוח הועתק 🔗' : 'לא הצלחתי להעתיק', 'ok'));
   const form = $('#ev-form', el), open = $('#ev-edit-open', el);
   if (!form || !open) return;
   open.addEventListener('click', () => { form.hidden = false; open.hidden = true; const x = form.querySelector('input:not([disabled]), select:not([disabled]), textarea'); if (x) x.focus(); });

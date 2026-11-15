@@ -63,7 +63,13 @@ function eventHref(e) {
 }
 function waLink(phone, text) {
   const p = String(phone || '').replace(/\D/g, '').replace(/^0/, '972');
-  return `https://wa.me/${p}${text ? '?text=' + encodeURIComponent(text) : ''}`;
+  const web = `https://wa.me/${p}${text ? '?text=' + encodeURIComponent(text) : ''}`;
+  // תמיד וואטסאפ הרגיל (לא Business): באנדרואיד — intent לחבילה com.whatsapp; באייפון — whatsapp://
+  const q = [p ? 'phone=' + p : '', text ? 'text=' + encodeURIComponent(text) : ''].filter(Boolean).join('&');
+  const ua = navigator.userAgent || '';
+  if (/Android/i.test(ua)) return `intent://send?${q}#Intent;scheme=whatsapp;package=com.whatsapp;S.browser_fallback_url=${encodeURIComponent(web)};end`;
+  if (/iPhone|iPad|iPod/i.test(ua)) return `whatsapp://send?${q}`;
+  return web;
 }
 function wazeLink(address) {
   return `https://waze.com/ul?q=${encodeURIComponent(address)}&navigate=yes`;
@@ -320,6 +326,14 @@ function startApp() {
 }
 
 window.addEventListener('hashchange', () => route());
+// קישורי אפליקציה (וואטסאפ הרגיל) — פותחים במקום, לא בלשונית חדשה שנשארת ריקה
+document.addEventListener('click', ev => {
+  const a = ev.target.closest && ev.target.closest('a[href^="intent:"], a[href^="whatsapp:"]');
+  if (!a) return;
+  ev.preventDefault();
+  a.dispatchEvent(new CustomEvent('wa-open', { bubbles: true }));
+  location.href = a.getAttribute('href');
+}, true);
 ['input', 'change'].forEach(t => document.addEventListener(t, ev => { if (ev.target.closest && ev.target.closest('#view')) viewDirty = true; }, true));
 
 if ('serviceWorker' in navigator && !CFG.DEV_PINS) {
