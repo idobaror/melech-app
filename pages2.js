@@ -421,7 +421,7 @@ function renderChecklist(el, cl) {
       const short = done < total || remarks;
       const header = short ? 'פרוטוקול הקמה ⚠️ יש חוסרים' : 'פרוטוקול הקמה הושלם ✅';
       const evName = $('#p-event', el).selectedOptions[0].textContent;
-      const msg = `${header}\n${row ? evName + '\n' : ''}לצפייה בדוח: ${res.reportUrl}`;
+      const msg = `${header}\n${row ? evName + '\n' : ''}לצפייה בדוח: ${APP_URL}#/report/${encodeURIComponent(res.id)}`;
       el.innerHTML = `<section class="card" style="text-align:center">
         <div style="font-size:56px">${short ? '⚠️' : '✅'}</div>
         <h2>${short ? 'הפרוטוקול נשלח עם חוסרים' : 'הפרוטוקול הושלם!'}</h2>
