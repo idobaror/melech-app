@@ -72,7 +72,7 @@ function crewMessage(e, c, cf) {
     '',
     ...eventDetailLines(e, cf),
     '',
-    `לאישור הגעה ולכל הפרטים: ${APP_URL}${eventHref(e)}`
+    `${CONFIRM_ARRIVAL ? 'לאישור הגעה ולכל הפרטים' : 'לכל הפרטים'}: ${APP_URL}${eventHref(e)}`
   ].filter(x => x !== null).join('\n');
 }
 
@@ -85,7 +85,7 @@ function crewGroupMessage(e, crew, cf) {
     '*הצוות:*',
     ...crew.map(c => `• ${c.name}${c.role ? ' — ' + c.role : ''}`),
     '',
-    `לאישור הגעה ולפרטים: ${APP_URL}${eventHref(e)}`
+    `${CONFIRM_ARRIVAL ? 'לאישור הגעה ולפרטים' : 'לכל הפרטים'}: ${APP_URL}${eventHref(e)}`
   ].filter(x => x !== null).join('\n');
 }
 
@@ -101,7 +101,11 @@ async function copyText(text) {
   }
 }
 
+// אישור הגעה של צוות — כבוי: מי שמורשה לשבץ משבץ, בלי המתנה לאישור
+const CONFIRM_ARRIVAL = false;
+
 function confirmBadge(c) {
+  if (!CONFIRM_ARRIVAL) return '';
   if (c.confirm === 'מאשר') return '<span class="badge ok">✓ מאשר</span>';
   if (c.confirm === 'לא זמין') return '<span class="badge bad">✗ לא זמין</span>';
   return '<span class="badge warn">ממתין לאישור</span>';
@@ -231,6 +235,9 @@ function requestsSection(d, e) {
 function myConfirmSection(d) {
   if (!d.myRole && d.myConfirm === '') return '';
   if (!d.crew.some(c => c.userId === S.user.id)) return '';
+  if (!CONFIRM_ARRIVAL) return d.myRole || d.myNote ? `<section class="card"><h2>🎤 שובצת לאירוע הזה</h2>
+    ${d.myRole ? `<p class="small" style="margin-top:0">התפקיד שלך: <span class="badge brand">${esc(d.myRole)}</span></p>` : ''}
+    ${d.myNote ? `<div class="note-box">📝 ${esc(d.myNote)}</div>` : ''}</section>` : '';
   const st = d.myConfirm;
   const title = st === 'מאשר' ? '✓ אישרת הגעה' : st === 'לא זמין' ? '✗ הודעת שאתה לא זמין' : '👋 שובצת לאירוע הזה — מגיע?';
   return `<section class="card confirm-card ${st === 'ממתין' ? 'pending' : ''}" id="my-confirm">
@@ -250,7 +257,7 @@ function myConfirmSection(d) {
 
 function bindMyConfirm(el, e) {
   const box = $('#my-confirm', el);
-  if (!box) return;
+  if (!box || !CONFIRM_ARRIVAL) return;
   const send = async (status, reason) => {
     busy(true, 'שולח…');
     try {
@@ -297,7 +304,7 @@ PAGES.home = {
     const kpis = [];
     if ('upcoming' in c) kpis.push(`<a class="kpi" href="#/events?f=upcoming"><b>${c.upcoming}</b><span>אירועים קרובים</span></a>`,
       `<a class="kpi ${c.noCrew ? 'alert' : ''}" href="#/events?f=nocrew"><b>${c.noCrew}</b><span>בלי צוות</span></a>`);
-    if (c.declined) kpis.push(`<a class="kpi alert" href="#declined-card" data-scroll="declined-card"><b>${c.declined}</b><span>לא זמינים — להחליף</span></a>`);
+    if (CONFIRM_ARRIVAL && c.declined) kpis.push(`<a class="kpi alert" href="#declined-card" data-scroll="declined-card"><b>${c.declined}</b><span>לא זמינים — להחליף</span></a>`);
     if ('waitingForQuote' in c) kpis.push(`<a class="kpi ${c.waitingForQuote ? 'alert' : ''}" href="${canView('events_all') ? '#/events?f=waiting' : '#/quote'}"><b>${c.waitingForQuote}</b><span>ממתינים להצעה</span></a>`);
     if ('unpaid' in c) kpis.push(`<a class="kpi ${c.unpaid ? 'alert' : ''}" href="${canView('events_all') ? '#/events?f=unpaid' : '#/home'}"><b>${c.unpaid}</b><span>לגבייה</span></a>`);
     if ('openNotes' in c) kpis.push(`<a class="kpi ${c.openNotes ? 'alert' : ''}" href="#notes-card" data-scroll="notes-card"><b>${c.openNotes}</b><span>הערות פתוחות</span></a>`);
@@ -310,13 +317,13 @@ PAGES.home = {
 
     // אירועים שלי — עם בקשת אישור הגעה
     const mine = d.myEvents.map(e => eventItem(e, esc([e.startTime, e.location].filter(Boolean).join(' · ')),
-      (e.confirm === 'ממתין' ? '<span class="badge warn">לאשר הגעה</span>' : e.confirm === 'לא זמין' ? '<span class="badge bad">לא זמין</span>' : '') +
+      (!CONFIRM_ARRIVAL ? '' : e.confirm === 'ממתין' ? '<span class="badge warn">לאשר הגעה</span>' : e.confirm === 'לא זמין' ? '<span class="badge bad">לא זמין</span>' : '') +
       (e.myRole ? ` <span class="badge brand">${esc(e.myRole)}</span>` : '')));
     if (mine.length || !kpis.length) {
-      h += listCard(`🎤 האירועים שלי${c.toConfirm ? ` <span class="badge warn">${c.toConfirm} לאשר</span>` : ''}`, mine, 'אין לך אירועים קרובים');
+      h += listCard(`🎤 האירועים שלי${CONFIRM_ARRIVAL && c.toConfirm ? ` <span class="badge warn">${c.toConfirm} לאשר</span>` : ''}`, mine, 'אין לך אירועים קרובים');
     }
 
-    if (d.declined && d.declined.length) {
+    if (CONFIRM_ARRIVAL && d.declined && d.declined.length) {
       h += listCard('⚠️ הודיעו שהם לא זמינים', d.declined.map(e =>
         eventItem(e, `<b>${esc(e.who)}</b>${e.role ? ' (' + esc(e.role) + ')' : ''}${e.reason ? ' — ' + esc(e.reason) : ''}`, '<span class="badge bad">להחליף</span>')), '', '', 'declined-card');
     }
@@ -879,7 +886,7 @@ function bindCrew(el, d) {
     $('#crew-list', el).innerHTML = crew.length ? crew.map((c, i) => {
       const phone = userOf(c.userId).phone;
       return `<div class="crew-row"><div class="grow"><b>${esc(c.name)}</b>
-        <span class="small muted">${esc(c.role || '')}${c.note ? ' · ' + esc(c.note) : ''}${c.confirm === 'לא זמין' && c.confirmNote ? ' · <b>' + esc(c.confirmNote) + '</b>' : ''}</span></div>
+        <span class="small muted">${esc(c.role || '')}${c.note ? ' · ' + esc(c.note) : ''}${CONFIRM_ARRIVAL && c.confirm === 'לא זמין' && c.confirmNote ? ' · <b>' + esc(c.confirmNote) + '</b>' : ''}</span></div>
         ${c.confirm ? confirmBadge(c) : '<span class="badge">לא נשמר</span>'}
         ${assign && justSaved && phone ? `<a class="btn sm wa" target="_blank" href="${waLink(phone, crewMessage(e, c, d.clientForm))}">📲</a>` : ''}
         ${assign ? `<button class="btn sm danger" data-rm="${i}" aria-label="הסר">✕</button>` : ''}</div>`;
