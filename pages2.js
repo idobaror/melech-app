@@ -232,9 +232,13 @@ async function loadQuoteEvent(el, value, opts, alive, openDoc) {
       if (res.key) { e.key = res.key; e.row = res.row; }
       e.phone = data.phone || e.phone;
       e.name = data.name || e.name;
-      if (res.pdfUrl) showQuoteResult($('#q-result', box), e, res, lastEmail);
+      if (res.pdfUrl) await showQuoteResult($('#q-result', box), e, res, lastEmail);
       else if (res.draft) showQuoteDraft($('#q-result', box), e, res, lastEmail);
       else toast(res.message || 'עודכן ✅', 'ok');
+      // הכתיבה לגיליון כבויה — אומרים את זה במפורש
+      if (res.sheetSkipped && mode === 'save') {
+        $('#q-result', box).insertAdjacentHTML('afterbegin', '<section class="card" style="border-color:var(--warn)"><b>⚠️ הגיליון לא עודכן</b><p class="small" style="margin:4px 0 0">ההצעה נוצרה, אבל הכתיבה ל"פניות על הפרק" כבויה — סטטוס, מחיר ושאר הפרטים צריך לעדכן ידנית בגיליון.</p></section>');
+      }
     } catch (err) { toast(err.message, 'bad'); } finally { busy(false); }
   };
   form.addEventListener('submit', ev => { ev.preventDefault(); send('save'); });
