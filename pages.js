@@ -1,8 +1,11 @@
 // ===== דפים (חלק 1): רכיבים משותפים, בית, אירועים, פרטי אירוע, יומן, הגדרות =====
 // כל קטע מוצג לפי ההרשאות: can('x') לפעולה, canView('x') לצפייה (כולל "צפייה בכל דבר")
 
+// אירוע בסטטוס "פתוח" — מוצג באפור, כדי להבדיל מסגורים
+const isOpenStatus = st => String(st || '').includes('פתוח');
+
 function eventItem(e, sub, extraBadge, href) {
-  return `<a class="item" href="${href || eventHref(e)}">
+  return `<a class="item${isOpenStatus(e.status) ? ' is-open' : ''}" href="${href || eventHref(e)}">
     ${dateBox(e.date)}
     <div class="grow">
       <div class="title">${esc(e.name)}</div>
@@ -1076,7 +1079,7 @@ PAGES.calendar = {
         const others = d.blockedByDay && d.blockedByDay[ds] ? d.blockedByDay[ds].length : 0;
         cells += `<button class="cal-cell ${ds === today ? 'today' : ''} ${list.length ? 'has' : ''} ${blocked.has(ds) ? 'blocked' : ''} ${ds < today ? 'past' : ''}" data-day="${ds}">
           <span class="num">${day}</span>
-          ${list.length ? `<span class="cal-count ${waiting ? 'waiting' : ''}">${list.length}</span>` : ''}
+          ${list.length ? `<span class="cal-count ${waiting ? 'waiting' : list.every(e => isOpenStatus(e.status)) ? 'open' : ''}">${list.length}</span>` : ''}
           ${others ? `<span class="cal-off" title="לא זמינים">🚫${others}</span>` : ''}
         </button>`;
       }
