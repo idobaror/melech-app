@@ -435,7 +435,7 @@ PAGES.events = {
           case 'upcoming': return active && e.date && e.date >= today;
           case 'nocrew': return active && e.date && e.date >= today && !e.crew;
           case 'waiting': return !e.status;
-          case 'unpaid': return e.status === 'קרה' && e.date && e.date <= today;
+          case 'unpaid': return e.unpaid === true;   // השרת מחשב: קרה, עבר, "חשבונות" לא "הושלם", ולא שולם לפי הרישום
           case 'past': return e.date && e.date < today;
           default: return true;
         }
