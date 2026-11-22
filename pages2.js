@@ -63,7 +63,11 @@ async function loadQuoteEvent(el, value, opts, alive, openDoc) {
         <label style="margin-top:0">שם אירוע</label><input name="name" value="${esc(e.name)}">
         <div class="grid2">
           <div><label>סטטוס</label><select name="status">${optionsHtml(opts.statusOptions, e.status)}</select></div>
-          <div><label>טלפון</label><input name="phone" value="${esc(e.phone)}"></div>
+          <div><label>טלפון</label><input name="phone" type="tel" dir="ltr" value="${esc(e.phone)}">
+            <div class="chips-row" style="margin-top:6px">
+              <button class="chip-btn wa" type="button" id="q-phone-wa">💬 וואטסאפ</button>
+              <button class="chip-btn" type="button" id="q-phone-copy">📋 העתק מספר</button>
+            </div></div>
           <div><label>תאריך</label><input name="eventDate" value="${esc(e.dateText)}" placeholder="dd/mm/yyyy"></div>
           <div><label>שעת עלייה</label><input name="startTime" value="${esc(e.startTime)}"></div>
           <div><label>מוצר</label><select name="eventType" id="q-type">${optionsHtml(opts.eventTypeOptions, e.eventType)}</select></div>
@@ -129,6 +133,16 @@ async function loadQuoteEvent(el, value, opts, alive, openDoc) {
     <div id="q-result"></div>`;
 
   const form = $('#q', box);
+  // טלפון הלקוח: וואטסאפ / העתקה — לפי מה שכתוב בשדה כרגע (כמו בכלי הישן)
+  const phoneNow = () => form.elements.phone.value.trim();
+  $('#q-phone-wa', box).addEventListener('click', () => {
+    if (!phoneNow()) return toast('אין מספר טלפון', 'bad');
+    location.href = waLink(phoneNow());
+  });
+  $('#q-phone-copy', box).addEventListener('click', async () => {
+    if (!phoneNow()) return toast('אין מספר טלפון', 'bad');
+    toast(await copyText(phoneNow()) ? 'המספר הועתק 📋' : 'לא הצלחתי להעתיק', 'ok');
+  });
   const P = opts.pricing || {};
   const on = id => $('#q-' + id, box).checked;
   const num = v => parseFloat(String(v || '').replace(/,/g, '').replace(/[^\d.]/g, ''));
