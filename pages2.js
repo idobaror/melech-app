@@ -56,8 +56,8 @@ async function loadQuoteEvent(el, value, opts, alive, openDoc) {
   const lastEmail = ((d.quotes || []).find(q => q.emailTo) || {}).emailTo || '';
 
   box.innerHTML = `
-    ${sameDay.length ? `<section class="card" style="border-color:var(--warn)"><b>⚠️ יש עוד ${sameDay.length} אירועים באותו יום:</b>
-      <div class="small">${sameDay.map(o => esc(`${o.name} ${o.startTime ? '(' + o.startTime + ')' : ''} ${o.location ? '· ' + o.location : ''}`)).join('<br>')}</div></section>` : ''}
+    ${sameDay.length ? `<section class="card" id="q-sameday" style="border-color:var(--warn)"><b>⚠️ יש עוד ${sameDay.length} אירועים באותו יום:</b>
+      ${sameDay.map((o, i) => sameDayRow(o, i, e)).join('')}</section>` : ''}
     <section class="card">
       <form id="q">
         <label style="margin-top:0">שם אירוע</label><input name="name" value="${esc(e.name)}">
@@ -133,6 +133,7 @@ async function loadQuoteEvent(el, value, opts, alive, openDoc) {
     <div id="q-result"></div>`;
 
   const form = $('#q', box);
+  if ($('#q-sameday', box)) bindSameDay($('#q-sameday', box), d, e);
   // טלפון הלקוח: וואטסאפ / העתקה — לפי מה שכתוב בשדה כרגע (כמו בכלי הישן)
   const phoneNow = () => form.elements.phone.value.trim();
   $('#q-phone-wa', box).addEventListener('click', () => {

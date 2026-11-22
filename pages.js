@@ -990,12 +990,27 @@ function quotesFold(d) {
     </div>${q.signed ? `<div class="small muted" style="margin:-4px 0 6px">נחתם ע"י ${esc(q.signed.name)} · ${esc(q.signed.at)}</div>` : ''}`).join('') : '<p class="empty">עוד לא הופקה הצעה</p>', drafts > 0, `<span class="badge${drafts ? ' warn' : ''}">${drafts ? drafts + ' טיוטה' : d.quotes.length}</span>`);
 }
 
+// אירוע אחר באותו יום — כמו בכלי הישן: סטטוס, שעה, מיקום, וואטסאפ/העתקת הטלפון של הלקוח, זמן נסיעה
+function sameDayRow(o, i, e) {
+  return `<div class="crew-row" style="align-items:flex-start">
+    <div class="grow"><a href="${eventHref(o)}"><b>${esc(o.name)}</b></a>
+      <div class="small muted">${esc([o.startTime ? '⏰ ' + o.startTime : '', o.location ? '📍 ' + o.location : ''].filter(Boolean).join(' · '))}</div>
+      <div class="chips-row" style="margin-top:6px">
+        ${o.phone ? `<a class="chip-btn wa" href="${waLink(o.phone)}" target="_blank">💬 וואטסאפ</a><button class="chip-btn" type="button" data-copy-phone="${esc(o.phone)}">📋 העתק מספר</button>` : ''}
+        ${o.location && e.location ? `<button class="chip-btn" type="button" data-travel="${i}">🚗 זמן נסיעה</button>` : ''}
+      </div></div>
+    ${statusBadge(o.status)}</div>`;
+}
+
+function bindSameDay(el, d, e) {
+  bindTravel(el, d, e);
+  $$('[data-copy-phone]', el).forEach(b => b.addEventListener('click', async () =>
+    toast(await copyText(b.dataset.copyPhone) ? 'המספר הועתק 📋' : 'לא הצלחתי להעתיק', 'ok')));
+}
+
 function sameDayFold(d, e) {
   if (!d.sameDay || !d.sameDay.length) return '';
-  return fold('🗓️ עוד באותו יום', d.sameDay.map((o, i) => `<div class="crew-row">
-      <div class="grow"><a href="${eventHref(o)}">${esc(o.name)}</a> <span class="small muted">${esc([o.startTime, o.location].filter(Boolean).join(' · '))}</span>
-      ${o.location && e.location ? `<button class="link-btn" data-travel="${i}">🚗 זמן נסיעה</button>` : ''}</div>
-      ${statusBadge(o.status)}</div>`).join(''), false, `<span class="badge warn">${d.sameDay.length}</span>`);
+  return fold('🗓️ עוד באותו יום', d.sameDay.map((o, i) => sameDayRow(o, i, e)).join(''), false, `<span class="badge warn">${d.sameDay.length}</span>`);
 }
 
 function requestsFold(d, e) {
@@ -1041,7 +1056,7 @@ function renderEvent(el, d, opts) {
   bindCrew(el, d);
   bindBilling(el, d);
   bindFollowUp(el, e);
-  bindTravel(el, d, e);
+  bindSameDay(el, d, e);
   bindNotes(el, e);
 }
 
