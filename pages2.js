@@ -57,7 +57,8 @@ async function loadQuoteEvent(el, value, opts, alive, openDoc) {
 
   box.innerHTML = `
     ${sameDay.length ? `<section class="card" id="q-sameday" style="border-color:var(--warn)"><b>⚠️ יש עוד ${sameDay.length} אירועים באותו יום:</b>
-      ${sameDay.map((o, i) => sameDayRow(o, i, e)).join('')}</section>` : ''}
+      ${sameDay.map((o, i) => sameDayRow(o, i, e)).join('')}</section>`
+      : e.date && d.sameDay ? `<section class="card" style="border-color:var(--ok)"><b>✅ התאריך פנוי</b> <span class="small muted">— אין אירועים נוספים ב${esc(fmtDate(e.date))}</span></section>` : ''}
     <section class="card">
       <form id="q">
         <label style="margin-top:0">שם אירוע</label><input name="name" value="${esc(e.name)}">

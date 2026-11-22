@@ -1009,7 +1009,8 @@ function bindSameDay(el, d, e) {
 }
 
 function sameDayFold(d, e) {
-  if (!d.sameDay || !d.sameDay.length) return '';
+  if (!d.sameDay) return '';
+  if (!d.sameDay.length) return e.date ? `<section class="card"><b>✅ התאריך פנוי</b> <span class="small muted">— אין אירועים נוספים באותו יום</span></section>` : '';
   return fold('🗓️ עוד באותו יום', d.sameDay.map((o, i) => sameDayRow(o, i, e)).join(''), false, `<span class="badge warn">${d.sameDay.length}</span>`);
 }
 
