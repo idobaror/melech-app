@@ -587,6 +587,8 @@ function billingSection(d) {
       ${'officeStatus' in d.event ? `<dt>סטטוס גבייה</dt><dd>${d.canEdit.indexOf('officeStatus') >= 0
         ? `<span class="inline-edit"><input id="bill-office" value="${esc(d.event.officeStatus || '')}" placeholder="למשל: הושלם"><button class="btn sm" type="button" id="bill-office-save">שמור</button></span>`
         : esc(d.event.officeStatus || '—')}</dd>` : ''}
+      ${d.event.price ? `<dt>סכום בהצעה</dt><dd>${esc(d.event.price)}</dd>` : ''}
+      ${d.event.invoiceDetails ? `<dt>פרטים לחשבונית</dt><dd>${esc(d.event.invoiceDetails)}</dd>` : ''}
       <dt>סכום שנחתם</dt><dd><b>${money(b.total)}</b>${b.total != null ? ` <span class="small muted">כולל מע"מ · ${money(b.beforeVat)} לפני</span>` : ''}</dd>
       <dt>שולם</dt><dd>${money(b.paid)}</dd>
       ${b.total != null ? `<dt>יתרה</dt><dd><b>${money(b.balance)}</b></dd>` : ''}
@@ -738,6 +740,8 @@ function eventFieldRows(e, cf) {
     ['יש במקום', esc(v('venueHas'))],
     ['מופעים נוספים', esc(e.additionalShows || v('shows'))],
     ['הערה', esc(e.notes || '')],
+    ['תיאום טכני', esc(e.techCoord || '')],
+    ['תאריך סגירה', e.closingDate ? esc(fmtDate(e.closingDate)) : ''],
     ['לקוח', e.phone ? telHtml(e.phone) : ''],
     ['מנהל/מפיק', telHtml(v('producerPhone'))],
     ['איש טכני', telHtml(v('techPhone'))],
@@ -794,8 +798,17 @@ function editForm(d, opts, canStaffFill) {
       ${f('מוצר', select('eventType', opts.eventTypeOptions, e.eventType))}
       ${f('הגברה', select('amplification', opts.amplificationOptions, e.amplification))}
     </div>
-    <label>מיקום</label>${input('location', e.location)}
-    <label>הערה כללית</label>${input('notes', e.notes)}` : `<p class="small muted">${PARALLEL_NOTE}</p>`}
+    <label>הערה כללית</label>${input('notes', e.notes)}
+    <div class="grid2">
+      ${ed('guestCount') ? f('כמות אורחים', input('guestCount', e.guestCount)) : ''}
+      ${ed('closingDate') ? f('תאריך סגירה', input('closingDate', e.closingDate, 'date')) : ''}
+      ${ed('price') ? f('סכום (בהצעה)', input('price', e.price)) : ''}
+    </div>
+    ${ed('additionalShows') ? `<label>מופעים נוספים</label>${input('additionalShows', e.additionalShows)}` : ''}
+    ${ed('celebrating') && !canStaffFill ? `<label>מה חוגגים</label>${input('celebrating', e.celebrating)}` : ''}
+    ${ed('techCoord') ? `<label>תיאום טכני</label><textarea name="techCoord" rows="2">${esc(e.techCoord || '')}</textarea>` : ''}
+    ${ed('invoiceDetails') ? `<label>פרטים לחשבונית</label>${input('invoiceDetails', e.invoiceDetails)}` : ''}
+    <p class="small muted" style="margin:6px 0 0">📍 המיקום נלקח מסוף שם האירוע — כדי לשנות אותו, עורכים את השם.</p>` : `<p class="small muted">${PARALLEL_NOTE}</p>`}
     ${canStaffFill ? `<h3 class="small muted" style="margin:14px 0 0">פרטים מהלקוח (אפשר להשלים ולתקן בשמו)</h3>
       ${cf.fields.filter(x => x.id !== 'title').map(staffFieldHtml).join('')}` : ''}
     <div class="btn-row"><button class="btn" type="submit">שמור</button><button class="btn ghost" type="button" id="ev-edit-cancel">ביטול</button></div>
