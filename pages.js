@@ -960,6 +960,85 @@ function bindCrew(el, d) {
   if ($('#crew-native', el)) $('#crew-native', el).addEventListener('click', () => navigator.share({ text: crewGroupMessage(e, crew, d.clientForm) }).catch(() => {}));
 }
 
+// ----- קבצים מצורפים (כרטיסי טיסה, חוזה, מפרט…) -----
+const fileIcon = m => /pdf/.test(m) ? '📄' : /^image\//.test(m) ? '🖼️' : /sheet|excel/.test(m) ? '📊' : /word|document/.test(m) ? '📝' : '📎';
+
+function filesFold(d) {
+  const files = d.files || [];
+  if (!files.length && !d.canUploadFiles) return '';
+  const e = d.event;
+  return fold('📎 קבצים', `<div id="files-list">${files.length ? files.map(f => `
+      <div class="crew-row"><div class="grow">${fileIcon(f.mime)} <a href="${esc(f.url)}" target="_blank"><b>${esc(f.name)}</b></a>
+        <div class="small muted">${esc(f.category)} · ${esc(f.by)} · ${esc(f.created)}${f.crewVisible ? '' : ' · 🔒 רק למשרד'}</div></div>
+        <a class="btn sm wa" href="${waLink('', `${f.category} — ${e.displayName || e.name}:\n${f.url}`)}" target="_blank" aria-label="שלח בוואטסאפ">📲</a>
+        ${f.canDelete ? `<button class="btn sm danger" data-file-del="${esc(f.id)}" aria-label="מחק">✕</button>` : ''}</div>`).join('') : '<p class="empty">אין קבצים עדיין</p>'}</div>
+    ${d.canUploadFiles ? `<form id="file-form">
+      <input type="file" id="file-input" multiple accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx">
+      <div class="grid2" style="margin-top:6px">
+        <div><label>סוג</label><select id="file-cat">${(d.fileCategories || ['אחר']).map(c => `<option>${esc(c)}</option>`).join('')}</select></div>
+        <div style="align-self:end"><label class="check" style="margin:0"><input type="checkbox" id="file-crew" checked> גלוי לצוות</label></div>
+      </div>
+      <button class="btn secondary block" type="submit" style="margin-top:8px">⬆️ העלה</button>
+    </form>` : ''}`, files.length > 0, files.length ? `<span class="badge">${files.length}</span>` : '');
+}
+
+// תמונה גדולה → מוקטנת לפני ההעלאה (מהיר בסלולר, ועדיין קריא)
+function shrinkImage(file) {
+  return new Promise(resolve => {
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size < 1.5 * 1024 * 1024) return resolve(null);
+    const img = new Image();
+    img.onload = () => {
+      const s = Math.min(1, 2000 / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      resolve(c.toDataURL('image/jpeg', 0.85).split(',')[1]);
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = () => resolve(null);
+    img.src = URL.createObjectURL(file);
+  });
+}
+const fileToB64 = file => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(file); });
+
+function bindFiles(el, d) {
+  const e = d.event;
+  const redraw = files => {
+    d.files = files;
+    const old = $('#files-list', el).closest('details');
+    old.outerHTML = filesFold(d);
+    bindFiles(el, d);
+  };
+  $$('[data-file-del]', el).forEach(b => b.addEventListener('click', async () => {
+    if (!b.dataset.armed) { b.dataset.armed = '1'; b.textContent = 'בטוח?'; setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.textContent = '✕'; } }, 4000); return; }
+    busy(true, 'מוחק…');
+    try { redraw(await api('file_delete', { row: e.row, key: e.key, id: b.dataset.fileDel })); toast('הקובץ נמחק', 'ok'); }
+    catch (err) { toast(err.message, 'bad'); } finally { busy(false); }
+  }));
+  const form = $('#file-form', el);
+  if (!form) return;
+  form.addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const list = [...$('#file-input', el).files];
+    if (!list.length) return toast('בחר קובץ', 'bad');
+    const category = $('#file-cat', el).value, crewVisible = $('#file-crew', el).checked;
+    let files = d.files;
+    try {
+      for (let i = 0; i < list.length; i++) {
+        const f = list[i];
+        busy(true, `מעלה ${i + 1}/${list.length}: ${f.name}`);
+        const small = await shrinkImage(f);
+        if (!small && f.size > 10 * 1024 * 1024) throw new Error(`${f.name} גדול מדי (עד 10MB)`);
+        files = await api('file_upload', { row: e.row, key: e.key, name: small ? f.name.replace(/\.\w+$/, '') + '.jpg' : f.name,
+          mime: small ? 'image/jpeg' : (f.type || 'application/octet-stream'), data: small || await fileToB64(f), category, crewVisible });
+        busy(false);
+      }
+      toast(list.length > 1 ? `${list.length} קבצים הועלו ✅` : 'הקובץ הועלה ✅', 'ok');
+    } catch (err) { busy(false); toast(err.message, 'bad'); }
+    redraw(files);
+  });
+}
+
 // ----- קטעים מקופלים -----
 function fold(title, body, open, extra) {
   return `<details class="card fold"${open ? ' open' : ''}><summary><h2>${title}</h2>${extra || ''}</summary>${body}</details>`;
@@ -1059,6 +1138,7 @@ function renderEvent(el, d, opts) {
     ${detailsCard(d, opts)}
     ${crewCard(d, opts)}
     ${billingSection(d)}
+    ${filesFold(d)}
     ${followUpFold(e)}
     ${quotesFold(d)}
     ${requestsFold(d, e)}
@@ -1069,6 +1149,7 @@ function renderEvent(el, d, opts) {
   bindDetails(el, d);
   bindCrew(el, d);
   bindBilling(el, d);
+  if ($('#files-list', el)) bindFiles(el, d);
   bindFollowUp(el, e);
   bindSameDay(el, d, e);
   bindNotes(el, e);
