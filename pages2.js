@@ -426,7 +426,7 @@ async function exportQuote(box, e, docId, lastEmail) {
 }
 
 // קישור ללקוח: צפייה בהצעה או אישור וחתימה (quote.html)
-const signLink = token => new URL('quote.html?t=' + encodeURIComponent(token), location.href).href;
+const signLink = token => new URL('q/?t=' + encodeURIComponent(token), location.href).href;
 
 async function showQuoteResult(box, e, res, lastEmail) {
   if (!res.signToken && res.pdfId && !res.signed) {
