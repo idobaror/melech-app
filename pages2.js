@@ -305,7 +305,7 @@ function pricePanelHtml(table, e) {
     const type = it.group ? 'radio' : 'checkbox';
     const flags = it.flags.map(f => `<span class="pp-flag ${f.on ? 'on' : ''}">${f.on ? '✓' : '✗'} ${esc(f.h.replace(/^כולל\s*/, ''))}</span>`).join('');
     html += `<label class="pp-row"><input type="${type}" name="pp-${it.group || 'x' + i}" value="${i}" data-i="${i}">
-      <span class="pp-label">${esc(it.label)}${flags ? `<span class="pp-flags">${flags}</span>` : ''}${it.note ? `<span class="small muted pp-note">${esc(it.note)}</span>` : ''}</span>
+      <span class="pp-label">${esc(it.label)}${flags ? `<span class="pp-flags">${flags}</span>` : ''}${it.note ? `<span class="small muted pp-note" title="${esc(it.note)}">${esc(it.note)}</span>` : ''}</span>
       <span class="pp-price">${esc(it.text)}</span></label>`;
     if (it.needsCost) html += `<div class="pp-cost" data-for="${i}" hidden><input type="number" min="0" placeholder="עלות הזמר/ים ₪" data-cost="${i}"></div>`;
   });
