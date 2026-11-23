@@ -65,7 +65,7 @@ async function loadQuoteEvent(el, value, opts, alive, openDoc) {
     ${sameDay.length ? `<section class="card" id="q-sameday" style="border-color:var(--warn)"><b>⚠️ יש עוד ${sameDay.length} אירועים באותו יום:</b>
       ${sameDay.map((o, i) => sameDayRow(o, i, e)).join('')}</section>`
       : e.date && d.sameDay ? `<section class="card" style="border-color:var(--ok)"><b>✅ התאריך פנוי</b> <span class="small muted">— אין אירועים נוספים ב${esc(fmtDate(e.date))}</span></section>` : ''}
-    <section class="card">
+    <div class="quote-layout">${pricePanelHtml(opts.priceTable, e)}<section class="card">
       <form id="q">
         <label style="margin-top:0">שם אירוע</label><input name="name" value="${esc(e.name)}">
         <div class="grid2">
@@ -136,7 +136,7 @@ async function loadQuoteEvent(el, value, opts, alive, openDoc) {
           <button class="btn ghost" type="button" id="q-update">🔄 עדכן גיליון בלבד</button>
         </div>
       </form>
-    </section>
+    </section></div>
     <div id="q-result"></div>`;
 
   const form = $('#q', box);
@@ -228,6 +228,8 @@ async function loadQuoteEvent(el, value, opts, alive, openDoc) {
     return data;
   };
 
+  bindPricePanel(box, form, e, opts.priceTable);
+
   const send = async (mode, exportNow) => {
     const data = collect();
     if (mode === 'save' && !data.price) return toast('חסר מחיר', 'bad');
@@ -253,6 +255,150 @@ async function loadQuoteEvent(el, value, opts, alive, openDoc) {
   // הגעה מטיוטה בכרטיס האירוע
   const doc = openDoc && (d.quotes || []).find(q => q.docId === openDoc);
   if (doc) (doc.draft ? showQuoteDraft : showQuoteResult)($('#q-result', box), e, doc, lastEmail);
+}
+
+// =====================================================
+// טבלת "תמחורים" ליד ההצעה + מחשבון. הנתונים מהגיליון (office@), כאן רק מפענחים:
+//   שורת קטגוריה = טקסט בלי מחיר. שורת פריט = שם + מחיר (+ עמודות "כולל…" + הערות).
+//   סכום ("25,000") → בסיס/תוספת · אחוז ("150%", "120% … +5,000") → מכפיל (+תוספת) · "+ עלות…" → שדה עלות.
+// =====================================================
+const PRICE_NUM = s => { const m = String(s || '').replace(/,/g, '').match(/\d+(\.\d+)?/); return m ? parseFloat(m[0]) : NaN; };
+
+function parsePriceTable(rows) {
+  const items = [];
+  let section = '', flagCols = [];
+  (rows || []).forEach(r => {
+    const [a, b] = [String(r[0] || '').trim(), String(r[1] || '').trim()];
+    if (!a && !b) {
+      const hdr = r.slice(2).map(x => String(x || '').trim());
+      if (hdr.some(Boolean)) flagCols = hdr;   // "כולל הגברה", "כולל ויג'יי", "הערות"
+      return;
+    }
+    if (a && !b) { section = a; return; }
+    if (!a) return;
+    const pct = b.match(/(\d+(?:\.\d+)?)\s*%/);
+    const plus = b.match(/\+\s*([\d,]+)(?!\s*יורו)/);
+    const it = { section, label: a, text: b, note: '', flags: [] };
+    r.slice(2).forEach((v, i) => {
+      const t = String(v || '').trim(), h = flagCols[i] || '';
+      if (!t) return;
+      if (/^(✓|✔|v|V|כן)$/.test(t)) it.flags.push({ h, on: true });
+      else if (/^(x|X|✗|לא)$/.test(t)) it.flags.push({ h, on: false });
+      else it.note = t;
+    });
+    if (pct) { it.kind = 'mult'; it.mult = parseFloat(pct[1]) / 100; it.add = plus ? PRICE_NUM(plus[1]) : 0; if (/יורו/.test(b)) it.note = it.note || b; }
+    else { it.amount = PRICE_NUM(b); it.needsCost = /עלות/.test(b); it.kind = /אירוע|אירוח/.test(section) ? 'base' : /מרחק/.test(a) ? 'dist' : 'extra'; }
+    it.group = it.kind === 'base' ? 'base' : it.kind === 'dist' ? 'dist' : it.kind === 'mult' ? (/חג/.test(a) ? 'holiday' : 'loc') : '';
+    items.push(it);
+  });
+  return items;
+}
+
+function pricePanelHtml(table, e) {
+  if (!table) return '';
+  if (table.error) return `<details class="card price-panel"><summary><h2>📋 תמחורים</h2></summary><p class="small warn-text">${esc(table.error)}</p></details>`;
+  const items = parsePriceTable(table.rows);
+  if (!items.length) return '';
+  let html = '', sec = null;
+  items.forEach((it, i) => {
+    if (it.section !== sec) { if (sec !== null) html += '</div>'; sec = it.section; html += `<div class="pp-sec"><div class="pp-sec-title">${esc(sec)}</div>`; }
+    const type = it.group ? 'radio' : 'checkbox';
+    const flags = it.flags.map(f => `<span class="pp-flag ${f.on ? 'on' : ''}">${f.on ? '✓' : '✗'} ${esc(f.h.replace(/^כולל\s*/, ''))}</span>`).join('');
+    html += `<label class="pp-row"><input type="${type}" name="pp-${it.group || 'x' + i}" value="${i}" data-i="${i}">
+      <span class="pp-label">${esc(it.label)}${flags ? `<span class="pp-flags">${flags}</span>` : ''}${it.note ? `<span class="small muted pp-note">${esc(it.note)}</span>` : ''}</span>
+      <span class="pp-price">${esc(it.text)}</span></label>`;
+    if (it.needsCost) html += `<div class="pp-cost" data-for="${i}" hidden><input type="number" min="0" placeholder="עלות הזמר/ים ₪" data-cost="${i}"></div>`;
+  });
+  html += '</div>';
+  return `<details class="card price-panel" id="pp"><summary><h2>📋 תמחורים</h2><span class="small muted">מחשבון</span></summary>
+    <div class="pp-body">${html}</div>
+    <div class="pp-result" id="pp-result"><p class="small muted" style="margin:0">סמן שורות כדי לחשב מחיר</p></div>
+    <div class="btn-row" style="margin-top:8px"><button class="btn" type="button" id="pp-apply" disabled>➡️ החל על ההצעה</button><button class="btn ghost" type="button" id="pp-clear">נקה</button></div>
+  </details>`;
+}
+
+function bindPricePanel(box, form, e, table) {
+  const panel = $('#pp', box);
+  if (!panel) return;
+  const items = parsePriceTable((table || {}).rows || []);
+  if (!items.length) return;
+  if (window.matchMedia('(min-width: 900px)').matches) panel.open = true;
+  // ברירת מחדל לפי סוג האירוע וכמות האורחים
+  const guests = parseInt(String(e.guestCount || '').replace(/[^0-9]/g, ''), 10);
+  const type = String(e.eventType || '');
+  const pre = items.findIndex(it => it.kind === 'base' && (
+    (/פרטי/.test(type) && /פרטי/.test(it.label)) ||
+    (/עסקי|חברה|ארגון/.test(type) && !isNaN(guests) && (() => {
+      const n = (it.label.match(/\d+/g) || []).map(Number);
+      if (/מתחת/.test(it.label)) return guests < n[0];
+      if (/בין/.test(it.label)) return guests >= n[0] && guests <= n[1];
+      if (/מעל/.test(it.label)) return guests >= n[0];
+      return false;
+    })())));
+  if (pre >= 0) $(`[data-i="${pre}"]`, panel).checked = true;
+  // רדיו שאפשר לבטל בלחיצה חוזרת
+  $$('input[type=radio]', panel).forEach(r => r.addEventListener('click', () => {
+    if (r.dataset.was === '1') { r.checked = false; r.dataset.was = ''; } else { $$(`[name="${r.name}"]`, panel).forEach(x => { x.dataset.was = ''; }); r.dataset.was = '1'; }
+    calc();
+  }));
+  const chosen = () => $$('input[data-i]:checked', panel).map(x => items[+x.dataset.i]);
+  const nis = n => '₪' + Math.round(n).toLocaleString('he-IL');
+  let last = null;
+  const calc = () => {
+    $$('.pp-cost', panel).forEach(c => { c.hidden = !$(`[data-i="${c.dataset.for}"]`, panel).checked; });
+    const sel = chosen();
+    const base = sel.find(it => it.kind === 'base');
+    const res = $('#pp-result', panel);
+    if (!base) { res.innerHTML = '<p class="small muted" style="margin:0">בחר אירוע / אירוח כבסיס</p>'; $('#pp-apply', panel).disabled = true; last = null; return; }
+    const steps = [];
+    let b = base.amount || 0;
+    steps.push(`${base.label}: ${nis(b)}`);
+    if (base.needsCost) { const c = parseFloat($(`[data-cost="${items.indexOf(base)}"]`, panel).value) || 0; if (c) { b += c; steps.push(`+ עלות זמר/ים ${nis(c)}`); } }
+    ['loc', 'holiday'].forEach(g => {
+      const m = sel.find(it => it.group === g);
+      if (m) { b = b * m.mult + (m.add || 0); steps.push(`${m.label}: ×${m.mult}${m.add ? ' + ' + nis(m.add) : ''} → ${nis(b)}`); }
+    });
+    const dist = sel.find(it => it.group === 'dist');
+    const extras = sel.filter(it => it.kind === 'extra');
+    let total = b;
+    if (dist) { total += dist.amount; steps.push(`+ ${dist.label} ${nis(dist.amount)}`); }
+    extras.forEach(x => { total += x.amount; steps.push(`+ ${x.label} ${nis(x.amount)}`); });
+    // תוספת שכבר כלולה בבסיס ("כולל ויג'יי")
+    const dup = extras.filter(x => base.flags.some(f => f.on && f.h.replace(/^כולל\s*/, '') && x.label.includes(f.h.replace(/^כולל\s*/, '').replace(/'/g, '')))).map(x => x.label);
+    res.innerHTML = `<div class="small">${steps.map(esc).join('<br>')}</div>
+      <div class="pp-total">סה"כ: ${nis(total)}</div>
+      ${dup.length ? `<p class="small warn-text" style="margin:4px 0 0">⚠️ ${esc(dup.join(', '))} כבר כלול באירוע שנבחר</p>` : ''}
+      ${sel.some(it => it.note && /יורו/.test(it.note)) ? '<p class="small muted" style="margin:4px 0 0">💶 התוספת ביורו לא נכללת בסכום — מציינים בנפרד</p>' : ''}`;
+    $('#pp-apply', panel).disabled = false;
+    last = { baseAfter: Math.round(b), dist, extras, sel };
+  };
+  panel.addEventListener('change', calc);
+  panel.addEventListener('input', ev => { if (ev.target.dataset.cost != null) calc(); });
+  $('#pp-clear', panel).addEventListener('click', () => { $$('input[data-i]', panel).forEach(x => { x.checked = false; x.dataset.was = ''; }); calc(); });
+  // החלה על טופס ההצעה: מחיר בסיס (אחרי מכפילים) + סימון התוספות בסעיפים שלהן — בלי ספירה כפולה
+  $('#pp-apply', panel).addEventListener('click', () => {
+    if (!last) return;
+    const set = (sel, on) => { const c = $(sel, form); if (c) c.checked = on; };
+    form.elements.price.value = last.baseAfter;
+    const ex = k => last.extras.find(x => k.test(x.label));
+    [['dj', /דיג/], ['vj', /ויג/], ['mc', /מנחה/]].forEach(([k, re]) => {
+      const x = ex(re);
+      set('#q-' + k, !!x);
+      if (x && form.elements[k + 'Price']) form.elements[k + 'Price'].value = x.amount;
+    });
+    set('#q-dist', !!last.dist);
+    if (last.dist) form.elements.distanceExtra.value = last.dist.amount;
+    const loc = last.sel.find(it => it.group === 'loc'), hol = last.sel.find(it => it.group === 'holiday');
+    set('#q-eilat', !!(loc && /אילת/.test(loc.label)));
+    set('#q-abroad', !!(loc && /חו"ל|חול/.test(loc.label)));
+    set('#q-holidayEve', !!(hol && /ערב/.test(hol.label)));
+    set('#q-holiday', !!(hol && !/ערב/.test(hol.label)));
+    form.dispatchEvent(new Event('change', { bubbles: true }));
+    form.elements.price.dispatchEvent(new Event('input', { bubbles: true }));
+    toast('המחיר והתוספות הוכנסו להצעה ✅', 'ok');
+    form.elements.price.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+  calc();
 }
 
 // טיוטה: המסמך נוצר — עורכים ב-Docs, ואז מייצאים PDF (כולל המפרטים המקושרים במסמך)

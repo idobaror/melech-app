@@ -378,3 +378,28 @@ details.fold[open] > summary { margin-bottom: 8px; padding-bottom: 6px; border-b
 .item.is-open .date-box { background: #e9e7ee; color: #8a8496; }
 .item.is-open .title { font-weight: 500; }
 .cal-count.open { background: #bdb8c6; color: #fff; }
+
+/* ---------- תמחורים ליד ההצעה ---------- */
+.quote-layout { display: block; }
+@media (min-width: 900px) {
+  .quote-layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 12px; align-items: start; }
+  .quote-layout > .price-panel { order: 2; position: sticky; top: 70px; max-height: calc(100vh - 90px); overflow: auto; }
+}
+details.price-panel > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+details.price-panel > summary::-webkit-details-marker { display: none; }
+details.price-panel > summary h2 { margin: 0; border-bottom: 0; padding-bottom: 0; flex: 1; }
+details.price-panel[open] > summary { margin-bottom: 8px; padding-bottom: 6px; border-bottom: 3px solid var(--brand-hot); }
+.pp-sec { margin-bottom: 8px; }
+.pp-sec-title { font-weight: 700; font-size: 13px; color: var(--muted); margin: 6px 0 2px; }
+.pp-row { display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 14px; }
+.pp-row input { width: auto; margin-top: 3px; flex: none; }
+.pp-label { flex: 1; min-width: 0; }
+.pp-price { font-weight: 700; white-space: nowrap; font-size: 13px; text-align: left; }
+.pp-flags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px; }
+.pp-flag { font-size: 11px; color: var(--muted); background: rgba(0,0,0,.05); padding: 1px 6px; border-radius: 99px; }
+.pp-flag.on { color: var(--ok); background: var(--ok-soft); }
+.pp-note { display: block; }
+.pp-cost { padding: 4px 0 6px 24px; }
+.pp-result { margin-top: 8px; padding: 10px; border-radius: 12px; background: var(--brand-soft); }
+.pp-total { font-size: 20px; font-weight: 800; margin-top: 4px; }
+.pp-price { white-space: normal; max-width: 42%; }
