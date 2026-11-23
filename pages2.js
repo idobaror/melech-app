@@ -13,12 +13,18 @@ PAGES.quote = {
     ]);
     if (!alive()) return;
 
-    const byDate = (a, b) => (a.date || '9999').localeCompare(b.date || '9999');
-    const waiting = events.filter(e => !e.status).sort(byDate);
+    // מועד הפנייה: תאריך+שעה מחותמת הטופס, ואם אין — "תאריך פנייה" מהגיליון. החדשות למעלה.
+    const inq = e => (qopts.inquiryTimes || {})[e.key] || e.inquiryDate || '';
+    const byInquiry = (a, b) => inq(b).localeCompare(inq(a)) || b.row - a.row;
+    const waiting = events.filter(e => !e.status).sort(byInquiry);
     const today = todayIso();
-    const others = events.filter(e => e.status && e.status !== 'נפל' && (!e.date || e.date >= today)).sort(byDate);
+    const others = events.filter(e => e.status && e.status !== 'נפל' && (!e.date || e.date >= today)).sort(byInquiry);
     const preRow = r.q.get('row'), preKey = r.q.get('k');
-    const optLabel = e => `${e.name}${e.date ? ' · ' + e.date.split('-').reverse().join('/') : ''}`;
+    const inqText = e => {
+      const m = /^(\d{4})-(\d{2})-(\d{2})(?: (\d{2}:\d{2}))?/.exec(inq(e));
+      return m ? `${+m[3]}/${+m[2]}/${m[1].slice(2)}${m[4] ? ' ' + m[4] : ''}` : '';
+    };
+    const optLabel = e => `${e.name}${inqText(e) ? ' · פנייה ' + inqText(e) : ''}`;
 
     el.innerHTML = `
       <section class="card">
