@@ -49,7 +49,7 @@ function eventDetailLines(e, cf) {
     v('celebrating') ? `🎉 מה חוגגים: ${v('celebrating')}` : null,
     v('startTime') && v('startTime') !== e.startTime ? `🕘 תחילת האירוע (כניסת קהל): ${v('startTime')}` : null,
     e.amplification ? `🔊 הגברה: ${e.amplification}` : null,
-    e.guestCount ? `👥 אורחים: ${e.guestCount}` : null,
+    e.guestCount ? `👥 כמות קהל: ${e.guestCount}` : null,
     v('venueHas') ? `🏛️ יש במקום: ${v('venueHas')}` : null,
     e.additionalShows || v('shows') ? `🎶 מופעים נוספים: ${e.additionalShows || v('shows')}` : null,
     e.notes ? `📝 ${e.notes}` : null
@@ -728,12 +728,12 @@ function eventFieldRows(e, cf) {
   return [
     ['תאריך', esc(fmtDate(e.date) || e.dateText || '')],
     ['שעת עלייה', esc(e.startTime || '')],
+    ['כמות קהל', e.guestCount ? `<b>${esc(e.guestCount)}</b>` : '<span class="muted">לא צוין</span>'],
     ['כניסת קהל', v('startTime') && v('startTime') !== e.startTime ? esc(v('startTime')) : ''],
     ['מיקום', e.location ? `${esc(e.location)} <a class="small" href="${wazeLink(address || e.location)}" target="_blank">ניווט</a>` : ''],
     ['כתובת מדויקת', address && address !== e.location ? esc(address) : ''],
     ['מוצר', esc(e.eventType || '')],
     ['הגברה', esc(e.amplification || '')],
-    ['אורחים', esc(e.guestCount || '')],
     ['מה חוגגים', esc(v('celebrating'))],
     ['יש במקום', esc(v('venueHas'))],
     ['מופעים נוספים', esc(e.additionalShows || v('shows'))],
