@@ -32,6 +32,12 @@ function parseIso(iso) {
   const [y, m, d] = iso.split('-').map(Number);
   return new Date(y, m - 1, d);
 }
+// מועד פנייה: "2026-11-23 14:35" → "פנייה 23/11/26 14:35"
+function inquiryText(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?: (\d{2}:\d{2}))?/.exec(s || '');
+  return m ? `📩 פנייה ${+m[3]}/${+m[2]}/${m[1].slice(2)}${m[4] ? ' ' + m[4] : ''}` : '';
+}
+
 function fmtDate(iso) {
   const d = parseIso(iso);
   if (!d) return '';

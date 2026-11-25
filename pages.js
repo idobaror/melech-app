@@ -340,9 +340,10 @@ PAGES.home = {
     }
 
     if (d.waitingForQuote) {
+      const inqSub = e => esc([inquiryText(e.inquiryAt), e.location].filter(Boolean).join(' · '));
       h += listCard('⏳ ממתינים להצעת מחיר', d.waitingForQuote.map(e => can('quotes')
-        ? eventItem(e, null, '<span class="badge brand">📄 להצעה</span>', `#/quote?row=${e.row}&k=${encodeURIComponent(e.key)}`)
-        : eventItem(e)), 'אין פניות שממתינות להצעה 🎉', '', '', 4, canView('events_all') ? '#/events?f=waiting' : '#/quote');
+        ? eventItem(e, inqSub(e), '<span class="badge brand">📄 להצעה</span>', `#/quote?row=${e.row}&k=${encodeURIComponent(e.key)}`)
+        : eventItem(e, inqSub(e))), 'אין פניות שממתינות להצעה 🎉', '', '', 4, canView('events_all') ? '#/events?f=waiting' : '#/quote');
     }
     if (d.upcoming) {
       h += listCard('📅 אירועים קרובים', d.upcoming.map(e =>
@@ -440,12 +441,14 @@ PAGES.events = {
           default: return true;
         }
       });
-      list.sort((a, b) => f === 'past' ? (b.date || '').localeCompare(a.date || '') : (a.date || '9999').localeCompare(b.date || '9999'));
+      list.sort((a, b) => f === 'past' ? (b.date || '').localeCompare(a.date || '')
+        : f === 'waiting' ? (b.inquiryAt || '').localeCompare(a.inquiryAt || '') || b.row - a.row   // הפנייה החדשה למעלה
+        : (a.date || '9999').localeCompare(b.date || '9999'));
       $('#ev-list', el).innerHTML = list.length
         ? list.slice(0, 200).map(e => all
             ? (person
               ? (c => eventItem(e, esc([c.role, e.location].filter(Boolean).join(' · ')), confirmBadge(c)))((e.crewList || []).find(c => c.id === person))
-              : eventItem(e, esc([e.eventType, e.location].filter(Boolean).join(' · ')), statusBadge(e.status) + (e.crew ? ` <span class="badge">👥 ${e.crew}</span>` : '')))
+              : eventItem(e, esc([f === 'waiting' || !e.status ? inquiryText(e.inquiryAt) : '', e.eventType, e.location].filter(Boolean).join(' · ')), statusBadge(e.status) + (e.crew ? ` <span class="badge">👥 ${e.crew}</span>` : '')))
             : eventItem(e, esc([e.myRole, e.location].filter(Boolean).join(' · ')), confirmBadge(e))).join('')
         : `<p class="empty">${all ? 'לא נמצאו אירועים' : 'אין אירועים שאתה משובץ אליהם'}</p>`;
     };
