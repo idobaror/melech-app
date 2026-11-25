@@ -416,3 +416,7 @@ details.price-panel[open] > summary { margin-bottom: 8px; padding-bottom: 6px; b
 
 /* "הצעה עבור" (למשל כפיר עטיה) */
 .tag-for { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 99px; background: #fff1d6; color: #8a5a00; vertical-align: middle; }
+
+/* תבנית הודעה — תצוגה לדוגמה (כמו בועת וואטסאפ) */
+.tpl-preview { white-space: pre-wrap; background: #dcf8c6; color: #111; border-radius: 10px 10px 2px 10px; padding: 8px 10px; font-size: 14px; line-height: 1.45; }
+#tpl-vars { margin: 4px 0 8px; }

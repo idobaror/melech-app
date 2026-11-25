@@ -433,12 +433,35 @@ async function exportQuote(box, e, docId, lastEmail) {
 // קישור ללקוח: צפייה בהצעה או אישור וחתימה (quote.html)
 const signLink = token => new URL('q/?t=' + encodeURIComponent(token), location.href).href;
 
+// ---------- תבנית הודעת וואטסאפ להצעה (נערכת בהגדרות, קבועה לכולם) ----------
+const QUOTE_WA_DEFAULT = 'היי {שם_פרטי}, מה נשמע?\nמצורפת הצעת המחיר עבור {אירוע} ({יום} {תאריך}):\n{קישור}\nבקישור אפשר לצפות בהצעה, ואם הכול מתאים — לאשר ולחתום ישירות 🙏\nלכל שאלה אני כאן 🎤';
+const QUOTE_WA_VARS = [
+  ['שם_פרטי', 'השם הפרטי של הלקוח'], ['לקוח', 'שם הלקוח (עד הפסיק הראשון)'], ['אירוע', 'שם האירוע המלא'],
+  ['תאריך', 'תאריך האירוע'], ['יום', 'יום בשבוע'], ['מיקום', 'מיקום'], ['קישור', 'הקישור להצעה']
+];
+function quoteMsgVars(e, link) {
+  const client = String(e.name || '').split(',')[0].trim();
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(e.date || '');
+  const days = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+  return {
+    'שם_פרטי': client.split(/\s+/)[0] || '', 'לקוח': client, 'אירוע': e.name || '',
+    'תאריך': m ? `${+m[3]}/${+m[2]}/${m[1]}` : '', 'יום': m ? 'יום ' + days[new Date(+m[1], +m[2] - 1, +m[3]).getDay()] : '',
+    'מיקום': e.location || '', 'קישור': link || ''
+  };
+}
+function fillTemplate(tpl, vars) {
+  return String(tpl).replace(/\{([^{}\s]+)\}/g, (all, k) => (k in vars ? vars[k] : all))
+    .replace(/[ \t]*\(\s*\)/g, '').replace(/ {2,}/g, ' ');   // משתנה ריק — בלי סוגריים ריקים
+}
+
 async function showQuoteResult(box, e, res, lastEmail) {
   if (!res.signToken && res.pdfId && !res.signed) {
     try { res.signToken = (await api('quote_sign_link', { pdfId: res.pdfId })).token; } catch (err) { /* בלי קישור — נשלח את ה-PDF */ }
   }
   const link = res.signToken ? signLink(res.signToken) : res.pdfUrl;
-  const msg = `היי, מה נשמע?\nמצורפת הצעת המחיר עבור ${e.name}:\n${link}\n${res.signToken ? 'בקישור אפשר לצפות בהצעה, ואם הכול מתאים — לאשר ולחתום ישירות 🙏\n' : ''}לכל שאלה אני כאן 🎤`;
+  let tpl = '';
+  try { tpl = (await api('quote_options')).waTemplate || ''; } catch (err) { /* ברירת מחדל */ }
+  const msg = fillTemplate(tpl || QUOTE_WA_DEFAULT, quoteMsgVars(e, link));
   box.innerHTML = `
     <section class="card" style="border-color:var(--ok)">
       <h2>✅ ההצעה מוכנה</h2>
@@ -456,6 +479,10 @@ async function showQuoteResult(box, e, res, lastEmail) {
         <button class="btn secondary" id="q-mail-open">📧 שליחה במייל</button>
         ${res.signToken ? '<button class="btn ghost" id="q-copy-link">🔗 העתק קישור</button>' : ''}
       </div>
+      ${e.phone ? `<details class="fold" style="margin-top:8px"><summary class="small">✏️ עריכת ההודעה לפני שליחה</summary>
+        <textarea id="q-wa-text" rows="6">${esc(msg)}</textarea>
+        <p class="small muted" style="margin:4px 0 0">שינוי כאן — רק להודעה הזו. התבנית הקבועה נערכת ב<a href="#/settings">הגדרות</a>.</p>
+      </details>` : ''}
       <form id="q-mail" hidden>
         <label>מייל הלקוח</label><input name="to" type="email" required value="${esc(lastEmail)}" placeholder="client@example.com">
         <label>נושא</label><input name="subject" value="${esc('הצעת מחיר — ' + e.name)}">
@@ -465,6 +492,7 @@ async function showQuoteResult(box, e, res, lastEmail) {
       </form>
     </section>`;
   box.scrollIntoView({ behavior: 'smooth' });
+  if ($('#q-wa-text', box)) $('#q-wa-text', box).addEventListener('input', ev => { $('#q-wa', box).href = waLink(e.phone, ev.target.value); });
   if ($('#q-wa', box)) $('#q-wa', box).addEventListener('click', () => {
     api('quote_mark_sent', { pdfId: res.pdfId, channel: 'whatsapp' }).catch(() => {});
   });

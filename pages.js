@@ -1288,7 +1288,43 @@ PAGES.settings = {
         } catch (err) { toast(err.message, 'bad'); } finally { busy(false); }
       });
     };
-    if (!can('admin')) { el.innerHTML = h; bindSelf(); return; }
+    // תבנית הודעת וואטסאפ להצעת מחיר — למי שמפיק הצעות
+    let waTpl = null;
+    if (can('quotes')) {
+      try { waTpl = (await api('quote_options')).waTemplate || ''; } catch (err) { waTpl = ''; }
+      if (!alive()) return;
+      h += `
+      <section class="card">
+        <h2>💬 הודעת וואטסאפ להצעת מחיר</h2>
+        <p class="small muted" style="margin-top:0">התבנית קבועה לכל מי ששולח הצעות. לחיצה על משתנה מוסיפה אותו במקום הסמן:</p>
+        <div class="chips-row" id="tpl-vars">${QUOTE_WA_VARS.map(([k, d]) => `<button type="button" class="chip-btn" data-v="{${k}}" title="${esc(d)}">{${esc(k)}}</button>`).join('')}</div>
+        <textarea id="tpl-text" rows="7">${esc(waTpl || QUOTE_WA_DEFAULT)}</textarea>
+        <p class="small muted" style="margin:8px 0 4px">תצוגה לדוגמה:</p>
+        <div class="tpl-preview" id="tpl-preview"></div>
+        <div class="btn-row" style="margin-top:8px"><button class="btn" type="button" id="tpl-save">💾 שמור כקבוע</button><button class="btn ghost" type="button" id="tpl-reset">↩️ ברירת מחדל</button></div>
+      </section>`;
+    }
+    const bindTpl = () => {
+      const ta = $('#tpl-text', el);
+      if (!ta) return;
+      const sample = { name: 'דנה כהן, יום הולדת 40, תל אביב', date: '2027-03-17', location: 'תל אביב' };
+      const preview = () => { $('#tpl-preview', el).textContent = fillTemplate(ta.value, quoteMsgVars(sample, 'https://king.shikerproductions.com/q/?t=…')); };
+      preview();
+      ta.addEventListener('input', preview);
+      $$('#tpl-vars [data-v]', el).forEach(b => b.addEventListener('click', () => {
+        const s = ta.selectionStart ?? ta.value.length, v = b.dataset.v;
+        ta.value = ta.value.slice(0, s) + v + ta.value.slice(ta.selectionEnd ?? s);
+        ta.focus(); ta.selectionStart = ta.selectionEnd = s + v.length; preview();
+      }));
+      const save = async text => {
+        busy(true, 'שומר…');
+        try { await api('template_set', { id: 'quote_wa', text }); toast('התבנית נשמרה ✅', 'ok'); }
+        catch (err) { toast(err.message, 'bad'); } finally { busy(false); }
+      };
+      $('#tpl-save', el).addEventListener('click', () => save(ta.value.trim() === QUOTE_WA_DEFAULT ? '' : ta.value));
+      $('#tpl-reset', el).addEventListener('click', () => { ta.value = QUOTE_WA_DEFAULT; preview(); save(''); });
+    };
+    if (!can('admin')) { el.innerHTML = h; bindSelf(); bindTpl(); return; }
 
     let [users, products, checklists] = await Promise.all([api('users_list'), api('products_list'), api('checklists_list')]);
     if (!alive()) return;
@@ -1343,7 +1379,7 @@ PAGES.settings = {
         <select id="cl-pick"></select>
         <div id="cl-editor"></div>
       </section>`;
-    bindSelf();
+    bindSelf(); bindTpl();
 
     // ----- משתתפים -----
     const form = $('#u-form', el);
