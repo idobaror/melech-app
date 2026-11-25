@@ -18,7 +18,11 @@ PAGES.quote = {
     const byInquiry = (a, b) => inq(b).localeCompare(inq(a)) || b.row - a.row;
     const waiting = events.filter(e => !e.status).sort(byInquiry);
     const today = todayIso();
-    const others = events.filter(e => e.status && e.status !== 'נפל' && (!e.date || e.date >= today)).sort(byInquiry);
+    // אירועים פעילים — לפי תאריך האירוע (הקרוב קודם), בלי תאריך בסוף
+    const byEventDate = (a, b) => (a.date || '9999').localeCompare(b.date || '9999') || a.row - b.row;
+    const others = events.filter(e => e.status && e.status !== 'נפל' && (!e.date || e.date >= today)).sort(byEventDate);
+    const dateText = e => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(e.date || ''); return m ? `${+m[3]}/${+m[2]}/${m[1].slice(2)}` : 'בלי תאריך'; };
+    const otherLabel = e => `${dateText(e)} · ${e.name}`;
     const preRow = r.q.get('row'), preKey = r.q.get('k');
     const inqText = e => {
       const m = /^(\d{4})-(\d{2})-(\d{2})(?: (\d{2}:\d{2}))?/.exec(inq(e));
@@ -32,7 +36,7 @@ PAGES.quote = {
         <select id="q-event">
           <option value="">— בחר אירוע —</option>
           ${waiting.length ? `<optgroup label="⚠️ ממתינים להצעה (${waiting.length})">${waiting.map(e => `<option value="${e.row}|${esc(e.key)}">🔴 ${esc(optLabel(e))}</option>`).join('')}</optgroup>` : ''}
-          ${others.length ? `<optgroup label="אירועים פעילים (${others.length})">${others.map(e => `<option value="${e.row}|${esc(e.key)}">${esc(optLabel(e))}</option>`).join('')}</optgroup>` : ''}
+          ${others.length ? `<optgroup label="אירועים פעילים (${others.length})">${others.map(e => `<option value="${e.row}|${esc(e.key)}">${esc(otherLabel(e))}</option>`).join('')}</optgroup>` : ''}
         </select>
       </section>
       <div id="q-form"></div>`;
