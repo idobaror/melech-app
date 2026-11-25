@@ -8,7 +8,7 @@ function eventItem(e, sub, extraBadge, href) {
   return `<a class="item${isOpenStatus(e.status) ? ' is-open' : ''}" href="${href || eventHref(e)}">
     ${dateBox(e.date)}
     <div class="grow">
-      <div class="title">${esc(e.name)}</div>
+      <div class="title">${esc(e.name)}${e.proposalFor ? ` <span class="tag-for">${esc(e.proposalFor)}</span>` : ''}</div>
       <div class="sub">${sub != null ? sub : esc([e.startTime, e.eventType].filter(Boolean).join(' · '))}</div>
     </div>
     ${extraBadge || ''}
@@ -735,6 +735,7 @@ function eventFieldRows(e, cf) {
     ['מיקום', e.location ? `${esc(e.location)} <a class="small" href="${wazeLink(address || e.location)}" target="_blank">ניווט</a>` : ''],
     ['כתובת מדויקת', address && address !== e.location ? esc(address) : ''],
     ['מוצר', esc(e.eventType || '')],
+    ['הצעה עבור', e.proposalFor ? `<span class="tag-for">${esc(e.proposalFor)}</span>` : ''],
     ['הגברה', esc(e.amplification || '')],
     ['מה חוגגים', esc(v('celebrating'))],
     ['יש במקום', esc(v('venueHas'))],
@@ -805,6 +806,7 @@ function editForm(d, opts, canStaffFill) {
       ${ed('price') ? f('סכום (בהצעה)', input('price', e.price)) : ''}
     </div>
     ${ed('additionalShows') ? `<label>מופעים נוספים</label>${input('additionalShows', e.additionalShows)}` : ''}
+    ${ed('proposalFor') ? `<label>הצעה עבור</label>${input('proposalFor', e.proposalFor)}` : ''}
     ${ed('celebrating') && !canStaffFill ? `<label>מה חוגגים</label>${input('celebrating', e.celebrating)}` : ''}
     ${ed('techCoord') ? `<label>תיאום טכני</label><textarea name="techCoord" rows="2">${esc(e.techCoord || '')}</textarea>` : ''}
     ${ed('invoiceDetails') ? `<label>פרטים לחשבונית</label>${input('invoiceDetails', e.invoiceDetails)}` : ''}

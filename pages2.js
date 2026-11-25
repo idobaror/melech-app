@@ -22,13 +22,14 @@ PAGES.quote = {
     const byEventDate = (a, b) => (a.date || '9999').localeCompare(b.date || '9999') || a.row - b.row;
     const others = events.filter(e => e.status && e.status !== 'נפל' && (!e.date || e.date >= today)).sort(byEventDate);
     const dateText = e => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(e.date || ''); return m ? `${+m[3]}/${+m[2]}/${m[1].slice(2)}` : 'בלי תאריך'; };
-    const otherLabel = e => `${dateText(e)} · ${e.name}`;
+    const otherLabel = e => `${dateText(e)} · ${e.name}${forText(e)}`;
     const preRow = r.q.get('row'), preKey = r.q.get('k');
     const inqText = e => {
       const m = /^(\d{4})-(\d{2})-(\d{2})(?: (\d{2}:\d{2}))?/.exec(inq(e));
       return m ? `${+m[3]}/${+m[2]}/${m[1].slice(2)}${m[4] ? ' ' + m[4] : ''}` : '';
     };
-    const optLabel = e => `${e.name}${inqText(e) ? ' · פנייה ' + inqText(e) : ''}`;
+    const forText = e => e.proposalFor ? ' · 🎯 ' + e.proposalFor : '';
+    const optLabel = e => `${e.name}${inqText(e) ? ' · פנייה ' + inqText(e) : ''}${forText(e)}`;
 
     el.innerHTML = `
       <section class="card">
